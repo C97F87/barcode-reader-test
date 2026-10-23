@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Lecteur de bobines — prototype</title>
+<style>
+:root{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#152236;background:#f4f7fb}
+*{box-sizing:border-box} body{margin:0;padding:24px 14px 50px}
+main{max-width:540px;margin:auto}header{margin-bottom:20px}h1{font-size:1.55rem;margin:0 0 8px}p{line-height:1.45}small,.hint{color:#556576}
+.card{background:#fff;border:1px solid #dfe5eb;border-radius:17px;padding:18px;margin-bottom:14px;box-shadow:0 1px 5px #14243a09}
+.tag{font-size:.74rem;text-transform:uppercase;font-weight:700;letter-spacing:.08em;color:#556576}
+#status{font-size:1.1rem;font-weight:600;min-height:1.5em}#value{font-size:clamp(1.6rem,6vw,2.2rem);font-weight:750;letter-spacing:.04em;overflow-wrap:anywhere;min-height:2.6rem}
+video{width:100%;max-height:340px;aspect-ratio:4/3;background:#152236;border-radius:12px;object-fit:cover}
+button{appearance:none;border:0;background:#124fbc;color:white;border-radius:10px;padding:12px 15px;font-weight:650;font-size:1rem;cursor:pointer;width:100%;margin:6px 0}
+button.secondary{background:#e9eef5;color:#142236}button:disabled{opacity:.48;cursor:not-allowed}label{display:block;margin:14px 0 5px;font-weight:600}
+input{width:100%;border:1px solid #aab7c7;border-radius:9px;padding:12px;font:inherit} .notice{padding:11px 13px;background:#f8fafc;border-radius:9px;color:#44556a;font-size:.88rem}
+</style>
+</head>
+<body>
+<main>
+  <header><div class="tag">Prototype local — aucun transfert automatique</div><h1>Lecteur de bobines</h1><p class="hint">Lecture Code 39 / Code 128 depuis la caméra arrière, puis ouverture de Power Apps professionnel après confirmation.</p></header>
+  <section class="card">
+    <div class="tag">1 — Scanner</div>
+    <p id="status" role="status">En attente de scan</p>
+    <video id="video" autoplay muted playsinline></video>
+    <button id="start">Activer la caméra arrière</button>
+    <button class="secondary" id="stop" disabled>Arrêter la caméra</button>
+    <p class="hint" id="capability">Un accès HTTPS et l'autorisation caméra sont nécessaires.</p>
+  </section>
+  <section class="card">
+    <div class="tag">2 — Numéro de bobine</div>
+    <div id="value" aria-live="polite">—</div>
+    <label for="manual">Ou saisir le code pour tester :</label>
+    <input id="manual" autocomplete="off" inputmode="text" placeholder="Ex. T488555419">
+    <button class="secondary" id="useManual">Utiliser la saisie</button>
+  </section>
+  <section class="card">
+    <div class="tag">3 — Ouvrir Power Apps professionnel</div>
+    <label for="appUrl">Lien web complet de ton Power Apps professionnel</label>
+    <input id="appUrl" type="url" spellcheck="false" autocomplete="off" placeholder="https://apps.powerapps.com/play/...?tenantId=...">
+    <p class="hint">Le lien doit commencer par https://apps.powerapps.com/. Le numéro ne part vers Power Apps qu'après ton clic.</p>
+    <button id="send" disabled>Ouvrir Power Apps avec cette bobine</button>
+    <p id="error" class="notice" role="alert">Aucun code envoyé. Ce prototype ne contacte pas SharePoint.</p>
+  </section>
+  <p class="hint">Ce prototype ne contient ni bibliothèque externe, ni analyse d'usage, ni accès SharePoint. L'API BarcodeDetector n'est pas disponible sur tous les navigateurs : si elle manque, la saisie manuelle reste utilisable. N'utilise des données professionnelles que sur un hébergement et avec un flux de travail approuvés par votre organisation.</p>
+</main>
+<script>
+'use strict';
+const video = document.getElementById('video');
+const status = document.getElementById('status');
+const value = document.getElementById('value');
+const capability = document.getElementById('capability');
+const send = document.getElementById('send');
+const error = document.getElementById('error');
+const start = document.getElementById('start');
+const stop = document.getElementById('stop');
+const appUrl = document.getElementById('appUrl');
+const manual = document.getElementById('manual');
+let stream = null, detector = null, scanning = false, inFlight = false, lastScan = 0, bobine = '';
+function cleanCode(raw) {
+  const code = String(raw || '').trim();
+  return /^T\d+$/i.test(code) ? code.slice(1) : code;
+}
+function setCode(raw){
+  const parsed = cleanCode(raw);
+  if(!/^\d{6,16}$/.test(parsed)) {
+    status.textContent = 'Code non reconnu : attendu T + chiffres (ou chiffres seuls)';
+    return;
+  }
+  bobine = parsed;
+  value.textContent = bobine;
+  status.textContent = 'Bobine détectée';
+  send.disabled = false;
+  stopCamera();
+}
+async function stopCamera(){
+  scanning = false;
+  if(stream){ for(const track of stream.getTracks())track.stop(); stream = null; }
+  video.srcObject = null;
+  start.disabled = false;
+  stop.disabled = true;
+}
+async function loop(t) {
+  if(!scanning) return;
+  if(!inFlight && t-lastScan > 180 && video.readyState >= 2) {
+    lastScan = t; inFlight = true;
+    try{
+      const matches = await detector.detect(video);
+      const chosen = matches.find(m => /^T?\d{6,16}$/i.test((m.rawValue || '').trim()));
+      if(chosen) { setCode(chosen.rawValue); return; }
+    }catch(e) { status.textContent = 'Impossible de décoder cette image'; }
+    finally{inFlight = false;}
+  }
+  if(scanning)requestAnimationFrame(loop);
+}
+start.addEventListener('click', async () => {
+  error.textContent = 'Aucune donnée transmise.';
+  if(!window.isSecureContext){status.textContent='La caméra exige HTTPS (ou localhost).';return;}
+  if(!navigator.mediaDevices?.getUserMedia){status.textContent='Accès caméra indisponible dans ce navigateur.';return;}
+  if(!('BarcodeDetector' in window)){status.textContent='Décodage natif indisponible sur cet Edge. Il faudra ajouter ZXing.';return;}
+  try{
+    const supported = await BarcodeDetector.getSupportedFormats();
+    const formats = ['code_128','code_39'].filter(f => supported.includes(f));
+    if(!formats.length) { status.textContent = 'Cet appareil ne prend en charge ni Code 39 ni Code 128 en lecture native.'; return; }
+    detector = new BarcodeDetector({formats});
+    stream = await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+    video.srcObject=stream;
+    await video.play();
+    start.disabled=true; stop.disabled=false;scanning=true;
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings?.() || {};
+    capability.textContent = 'Formats disponibles : ' + formats.join(', ') + '. Caméra : ' + (settings.facingMode || 'non précisée') + '.';
+    status.textContent='Présente un code-barres devant la caméra…';
+    requestAnimationFrame(loop);
+  } catch(e) {
+    stopCamera();
+    status.textContent = 'Caméra inaccessible : ' + (e?.message || e);
+  }
+});
+stop.addEventListener('click',()=>{stopCamera();status.textContent='Caméra arrêtée';});
+document.getElementById('useManual').addEventListener('click',()=>setCode(manual.value));
+send.addEventListener('click',()=>{
+  if(!bobine || !/^\d{6,16}$/.test(bobine)) return;
+  let u;
+  try{u=new URL(appUrl.value.trim());}catch{error.textContent='Colle un lien Power Apps valide.';return;}
+  if(u.protocol!=='https:' || u.hostname.toLowerCase()!=='apps.powerapps.com'){
+    error.textContent='Pour ta sécurité, seul le domaine officiel apps.powerapps.com est accepté.';return;
+  }
+  u.searchParams.set('bobine',bobine);
+  window.location.assign(u.toString());
+});
+window.addEventListener('pagehide',stopCamera);
+</script>
+</body>
+</html>
