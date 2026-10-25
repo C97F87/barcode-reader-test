@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
-<title>Lecteur de bobines — prototype</title>
+<title>Lecteur de bobines — LISI</title>
 <style>
 :root{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#152236;background:#f4f7fb}
 *{box-sizing:border-box} body{margin:0;padding:24px 14px 50px}
@@ -38,16 +38,17 @@ input{width:100%;border:1px solid #aab7c7;border-radius:9px;padding:12px;font:in
   </section>
   <section class="card">
     <div class="tag">3 — Ouvrir Power Apps professionnel</div>
-    <label for="appUrl">Lien web complet de ton Power Apps professionnel</label>
-    <input id="appUrl" type="url" spellcheck="false" autocomplete="off" placeholder="https://apps.powerapps.com/play/...?tenantId=...">
-    <p class="hint">Le lien doit commencer par https://apps.powerapps.com/. Le numéro ne part vers Power Apps qu'après ton clic.</p>
-    <button id="send" disabled>Ouvrir Power Apps avec cette bobine</button>
-    <p id="error" class="notice" role="alert">Aucun code envoyé. Ce prototype ne contacte pas SharePoint.</p>
+    <p class="hint">Le lien Power Apps est préconfiguré. Le numéro de bobine n'est transmis qu'après ton clic.</p>
+    <button id="send" disabled>Ouvrir la fiche bobine</button>
+    <p id="error" class="notice" role="alert">Aucun code envoyé. Ce lecteur ne contacte pas SharePoint.</p>
   </section>
-  <p class="hint">Ce prototype ne contient ni bibliothèque externe, ni analyse d'usage, ni accès SharePoint. L'API BarcodeDetector n'est pas disponible sur tous les navigateurs : si elle manque, la saisie manuelle reste utilisable. N'utilise des données professionnelles que sur un hébergement et avec un flux de travail approuvés par votre organisation.</p>
+  <p class="hint">Ce prototype ne contient ni bibliothèque externe, ni analyse d'usage, ni accès SharePoint. L'API BarcodeDetector n'est pas disponible sur tous les navigateurs : si elle manque, la saisie manuelle reste utilisable. N'utilise des données professionnelles que sur un hébergement et avec un flux de travail approuvés par ton organisation.</p>
 </main>
 <script>
 'use strict';
+
+
+const POWERAPPS_URL = "https://apps.powerapps.com/play/e/default-2da651fa-07e9-4e14-8225-3979c556c063/a/81fbe4f7-ce8f-4592-ab96-1d712d44a0db?tenantId=2da651fa-07e9-4e14-8225-3979c556c063&hint=d4aa9059-99e9-44c2-8a8a-322c4497331f&sourcetime=1792872277733";
 const video = document.getElementById('video');
 const status = document.getElementById('status');
 const value = document.getElementById('value');
@@ -56,9 +57,9 @@ const send = document.getElementById('send');
 const error = document.getElementById('error');
 const start = document.getElementById('start');
 const stop = document.getElementById('stop');
-const appUrl = document.getElementById('appUrl');
 const manual = document.getElementById('manual');
 let stream = null, detector = null, scanning = false, inFlight = false, lastScan = 0, bobine = '';
+
 function cleanCode(raw) {
   const code = String(raw || '').trim();
   return /^T\d+$/i.test(code) ? code.slice(1) : code;
@@ -124,9 +125,15 @@ document.getElementById('useManual').addEventListener('click',()=>setCode(manual
 send.addEventListener('click',()=>{
   if(!bobine || !/^\d{6,16}$/.test(bobine)) return;
   let u;
-  try{u=new URL(appUrl.value.trim());}catch{error.textContent='Colle un lien Power Apps valide.';return;}
+  try {
+    u = new URL(POWERAPPS_URL.trim());
+  } catch {
+    error.textContent = 'Le lien Power Apps n’est pas encore configuré dans index.html.';
+    return;
+  }
   if(u.protocol!=='https:' || u.hostname.toLowerCase()!=='apps.powerapps.com'){
-    error.textContent='Pour ta sécurité, seul le domaine officiel apps.powerapps.com est accepté.';return;
+    error.textContent='Pour ta sécurité, seul le domaine officiel apps.powerapps.com est accepté.';
+    return;
   }
   u.searchParams.set('bobine',bobine);
   window.location.assign(u.toString());
