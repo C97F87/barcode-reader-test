@@ -1,144 +1,302 @@
 <!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light">
-<title>Lecteur de bobines — LISI</title>
-<style>
-:root{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#152236;background:#f4f7fb}
-*{box-sizing:border-box} body{margin:0;padding:24px 14px 50px}
-main{max-width:540px;margin:auto}header{margin-bottom:20px}h1{font-size:1.55rem;margin:0 0 8px}p{line-height:1.45}small,.hint{color:#556576}
-.card{background:#fff;border:1px solid #dfe5eb;border-radius:17px;padding:18px;margin-bottom:14px;box-shadow:0 1px 5px #14243a09}
-.tag{font-size:.74rem;text-transform:uppercase;font-weight:700;letter-spacing:.08em;color:#556576}
-#status{font-size:1.1rem;font-weight:600;min-height:1.5em}#value{font-size:clamp(1.6rem,6vw,2.2rem);font-weight:750;letter-spacing:.04em;overflow-wrap:anywhere;min-height:2.6rem}
-video{width:100%;max-height:340px;aspect-ratio:4/3;background:#152236;border-radius:12px;object-fit:cover}
-button{appearance:none;border:0;background:#124fbc;color:white;border-radius:10px;padding:12px 15px;font-weight:650;font-size:1rem;cursor:pointer;width:100%;margin:6px 0}
-button.secondary{background:#e9eef5;color:#142236}button:disabled{opacity:.48;cursor:not-allowed}label{display:block;margin:14px 0 5px;font-weight:600}
-input{width:100%;border:1px solid #aab7c7;border-radius:9px;padding:12px;font:inherit} .notice{padding:11px 13px;background:#f8fafc;border-radius:9px;color:#44556a;font-size:.88rem}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>Lecteur de bobines — LISI</title>
+  <style>
+    :root { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; color:#152236; background:#f4f7fb }
+    * {box-sizing:border-box}
+    body {margin:0; padding:18px 14px 40px}
+    main {max-width:540px; margin:auto}
+    h1 {font-size:1.55rem; margin:0 0 6px}
+    p {line-height:1.45}
+    small,.hint {color:#556576}
+    .card {background:#fff; border:1px solid #dfe5eb; border-radius:16px; padding:16px; margin:14px 0; box-shadow:0 1px 5px #14243a09}
+    .tag {font-size:.75rem; text-transform:uppercase; font-weight:700; letter-spacing:.07em; color:#556576}
+    #status {font-size:1.04rem; font-weight:650; min-height:1.5em}
+    #value {font-size:clamp(1.65rem,6vw,2.2rem); font-weight:750; letter-spacing:.04em; overflow-wrap:anywhere; min-height:2.5rem; margin:10px 0}
+    #reader {width:100%; overflow:hidden; border-radius:12px; background:#152236; min-height:180px}
+    #reader video {width:100%; object-fit:cover; border-radius:12px}
+    button {appearance:none; border:0; background:#124fbc; color:white; border-radius:10px; padding:12px 14px; font-weight:650; font-size:1rem; cursor:pointer; width:100%; margin:6px 0}
+    button.secondary {background:#e9eef5; color:#142236}
+    button:disabled {opacity:.48;cursor:not-allowed}
+    label {display:block; margin:12px 0 5px; font-weight:600}
+    input[type="text"],select {width:100%; border:1px solid #aab7c7; border-radius:9px; padding:11px; font:inherit; background:white}
+    input[type="range"] {width:100%}
+    input[type="file"] {width:100%;margin-top:9px}
+    .notice {padding:10px 12px; background:#f8fafc; border-radius:9px; color:#44556a; font-size:.87rem}
+    .pair {display:grid; grid-template-columns:1fr 1fr; gap:8px}
+    .pair button {font-size:.9rem}
+    [hidden] {display:none!important}
+  </style>
 </head>
 <body>
 <main>
-  <header><div class="tag">Prototype local — aucun transfert automatique</div><h1>Lecteur de bobines</h1><p class="hint">Lecture Code 39 / Code 128 depuis la caméra arrière, puis ouverture de Power Apps professionnel après confirmation.</p></header>
+  <header>
+    <div class="tag">LISI — Barcode Reader</div>
+    <h1>Lecteur de bobines</h1>
+    <p class="hint">Code 39 / Code 128 · caméra arrière · lecture renforcée.</p>
+  </header>
+
   <section class="card">
     <div class="tag">1 — Scanner</div>
     <p id="status" role="status">En attente de scan</p>
-    <video id="video" autoplay muted playsinline></video>
-    <button id="start">Activer la caméra arrière</button>
-    <button class="secondary" id="stop" disabled>Arrêter la caméra</button>
-    <p class="hint" id="capability">Un accès HTTPS et l'autorisation caméra sont nécessaires.</p>
+    <div id="reader"></div>
+    <label for="camera">Caméra</label>
+    <select id="camera"><option value="">Arrière (automatique)</option></select>
+    <div class="pair">
+      <button id="start">Activer la caméra</button>
+      <button id="stop" class="secondary" disabled>Arrêter</button>
+    </div>
+    <div class="pair">
+      <button id="torch" class="secondary" hidden>Allumer la lampe</button>
+      <button id="refreshCameras" class="secondary">Lister les caméras</button>
+    </div>
+    <div id="zoomBox" hidden>
+      <label for="zoom">Zoom : <span id="zoomValue">1×</span></label>
+      <input id="zoom" type="range" min="1" max="2" step="0.1" value="1">
+    </div>
+    <p id="capability" class="hint">Place le code entier dans la zone de scan, sans être trop près de l'étiquette.</p>
+    <label for="photo">Si la vidéo ne fait pas le point : prendre une photo nette</label>
+    <input id="photo" type="file" accept="image/*" capture="environment">
+    <p class="hint">La photo est lue sur le téléphone, sans envoi à notre serveur.</p>
   </section>
+
   <section class="card">
     <div class="tag">2 — Numéro de bobine</div>
     <div id="value" aria-live="polite">—</div>
-    <label for="manual">Ou saisir le code pour tester :</label>
-    <input id="manual" autocomplete="off" inputmode="text" placeholder="Ex. T488555419">
-    <button class="secondary" id="useManual">Utiliser la saisie</button>
+    <label for="manual">Ou saisir le code :</label>
+    <input id="manual" type="text" autocomplete="off" inputmode="text" placeholder="Ex. T488366604">
+    <button id="useManual" class="secondary">Utiliser la saisie</button>
   </section>
+
   <section class="card">
-    <div class="tag">3 — Ouvrir Power Apps professionnel</div>
-    <p class="hint">Le lien Power Apps est préconfiguré. Le numéro de bobine n'est transmis qu'après ton clic.</p>
+    <div class="tag">3 — Ouvrir Power Apps</div>
+    <p class="hint">Le lien professionnel est déjà enregistré. Rien à copier-coller.</p>
     <button id="send" disabled>Ouvrir la fiche bobine</button>
-    <p id="error" class="notice" role="alert">Aucun code envoyé. Ce lecteur ne contacte pas SharePoint.</p>
+    <p id="error" role="alert" class="notice">Aucun code transmis.</p>
   </section>
-  <p class="hint">Ce prototype ne contient ni bibliothèque externe, ni analyse d'usage, ni accès SharePoint. L'API BarcodeDetector n'est pas disponible sur tous les navigateurs : si elle manque, la saisie manuelle reste utilisable. N'utilise des données professionnelles que sur un hébergement et avec un flux de travail approuvés par ton organisation.</p>
+  <p class="hint">Le décodeur est fourni par la bibliothèque open source html5-qrcode (v2.3.8). Elle est chargée depuis jsDelivr ; sa disponibilité dépend des règles réseau de ton organisation. Aucun accès direct à SharePoint depuis ce lecteur.</p>
 </main>
+
+<!-- Bibliothèque open source épinglée sur une version fixe : à héberger localement après validation informatique si nécessaire. -->
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
 
+// URL professionnelle fournie pour le projet Barcode Reader. Pas de jeton d'authentification.
+const POWERAPPS_URL = 'https://apps.powerapps.com/play/e/default-2da651fa-07e9-4e14-8225-3979c556c063/a/81fbe4f7-ce8f-4592-ab96-1d712d44a0db?tenantId=2da651fa-07e9-4e14-8225-3979c556c063';
 
-const POWERAPPS_URL = "https://apps.powerapps.com/play/e/default-2da651fa-07e9-4e14-8225-3979c556c063/a/81fbe4f7-ce8f-4592-ab96-1d712d44a0db?tenantId=2da651fa-07e9-4e14-8225-3979c556c063";
-const video = document.getElementById('video');
-const status = document.getElementById('status');
-const value = document.getElementById('value');
-const capability = document.getElementById('capability');
-const send = document.getElementById('send');
-const error = document.getElementById('error');
-const start = document.getElementById('start');
-const stop = document.getElementById('stop');
-const manual = document.getElementById('manual');
-let stream = null, detector = null, scanning = false, inFlight = false, lastScan = 0, bobine = '';
+const $ = id => document.getElementById(id);
+const status = $('status');
+const value = $('value');
+const capability = $('capability');
+const start = $('start');
+const stop = $('stop');
+const send = $('send');
+const error = $('error');
+const cameraSelect = $('camera');
+const torchButton = $('torch');
+const zoomBox = $('zoomBox');
+const zoom = $('zoom');
+
+let scanner = null;
+let isScanning = false;
+let torchOn = false;
+let detectedBobine = '';
+let stopping = null;
 
 function cleanCode(raw) {
-  const code = String(raw || '').trim();
-  return /^T\d+$/i.test(code) ? code.slice(1) : code;
+  const s = String(raw ?? '').trim();
+  const match = /^T?(\d{6,16})$/i.exec(s);
+  return match ? match[1] : '';
 }
-function setCode(raw){
-  const parsed = cleanCode(raw);
-  if(!/^\d{6,16}$/.test(parsed)) {
-    status.textContent = 'Code non reconnu : attendu T + chiffres (ou chiffres seuls)';
-    return;
+
+function setCode(raw) {
+  const code = cleanCode(raw);
+  if (!code) {
+    status.textContent = 'Code lu mais non reconnu : ' + String(raw).slice(0, 40);
+    return false;
   }
-  bobine = parsed;
-  value.textContent = bobine;
+  detectedBobine = code;
+  value.textContent = code;
   status.textContent = 'Bobine détectée';
   send.disabled = false;
-  stopCamera();
+  if (navigator.vibrate) navigator.vibrate(100);
+  void stopCamera();
+  return true;
 }
-async function stopCamera(){
-  scanning = false;
-  if(stream){ for(const track of stream.getTracks())track.stop(); stream = null; }
-  video.srcObject = null;
+
+function getScanner() {
+  if (typeof Html5Qrcode === 'undefined' || typeof Html5QrcodeSupportedFormats === 'undefined') {
+    throw new Error('Le module de lecture est indisponible. Le réseau bloque peut-être jsDelivr.');
+  }
+  if (!scanner) {
+    scanner = new Html5Qrcode('reader', {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39
+      ],
+      useBarCodeDetectorIfSupported: false
+    }, false);
+  }
+  return scanner;
+}
+
+function hideCameraTools() {
+  torchOn = false;
+  torchButton.hidden = true;
+  torchButton.textContent = 'Allumer la lampe';
+  zoomBox.hidden = true;
+}
+
+async function stopCamera() {
+  if (stopping) return stopping;
+  if (!isScanning || !scanner) return;
+  isScanning = false;
   start.disabled = false;
   stop.disabled = true;
+  hideCameraTools();
+  stopping = (async () => {
+    try { await scanner.stop(); } catch (e) { console.warn('Arrêt caméra :', e); }
+    try { scanner.clear(); } catch (e) { console.warn('Nettoyage caméra :', e); }
+  })();
+  try { await stopping; } finally { stopping = null; }
 }
-async function loop(t) {
-  if(!scanning) return;
-  if(!inFlight && t-lastScan > 180 && video.readyState >= 2) {
-    lastScan = t; inFlight = true;
-    try{
-      const matches = await detector.detect(video);
-      const chosen = matches.find(m => /^T?\d{6,16}$/i.test((m.rawValue || '').trim()));
-      if(chosen) { setCode(chosen.rawValue); return; }
-    }catch(e) { status.textContent = 'Impossible de décoder cette image'; }
-    finally{inFlight = false;}
-  }
-  if(scanning)requestAnimationFrame(loop);
-}
-start.addEventListener('click', async () => {
-  error.textContent = 'Aucune donnée transmise.';
-  if(!window.isSecureContext){status.textContent='La caméra exige HTTPS (ou localhost).';return;}
-  if(!navigator.mediaDevices?.getUserMedia){status.textContent='Accès caméra indisponible dans ce navigateur.';return;}
-  if(!('BarcodeDetector' in window)){status.textContent='Décodage natif indisponible sur cet Edge. Il faudra ajouter ZXing.';return;}
-  try{
-    const supported = await BarcodeDetector.getSupportedFormats();
-    const formats = ['code_128','code_39'].filter(f => supported.includes(f));
-    if(!formats.length) { status.textContent = 'Cet appareil ne prend en charge ni Code 39 ni Code 128 en lecture native.'; return; }
-    detector = new BarcodeDetector({formats});
-    stream = await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
-    video.srcObject=stream;
-    await video.play();
-    start.disabled=true; stop.disabled=false;scanning=true;
-    const track = stream.getVideoTracks()[0];
-    const settings = track.getSettings?.() || {};
-    capability.textContent = 'Formats disponibles : ' + formats.join(', ') + '. Caméra : ' + (settings.facingMode || 'non précisée') + '.';
-    status.textContent='Présente un code-barres devant la caméra…';
-    requestAnimationFrame(loop);
-  } catch(e) {
-    stopCamera();
-    status.textContent = 'Caméra inaccessible : ' + (e?.message || e);
-  }
-});
-stop.addEventListener('click',()=>{stopCamera();status.textContent='Caméra arrêtée';});
-document.getElementById('useManual').addEventListener('click',()=>setCode(manual.value));
-send.addEventListener('click',()=>{
-  if(!bobine || !/^\d{6,16}$/.test(bobine)) return;
-  let u;
+
+function setupCameraTools() {
+  hideCameraTools();
   try {
-    u = new URL(POWERAPPS_URL.trim());
-  } catch {
-    error.textContent = 'Le lien Power Apps n’est pas encore configuré dans index.html.';
-    return;
+    const caps = scanner.getRunningTrackCameraCapabilities();
+    const torch = caps.torchFeature();
+    if (torch && torch.isSupported()) torchButton.hidden = false;
+    const zoomCap = caps.zoomFeature();
+    if (zoomCap && zoomCap.isSupported()) {
+      zoom.min = String(zoomCap.min());
+      zoom.max = String(zoomCap.max());
+      zoom.step = String(zoomCap.step() || 0.1);
+      const current = Number(zoomCap.value() ?? zoomCap.min());
+      zoom.value = String(Math.max(zoomCap.min(), Math.min(current, zoomCap.max())));
+      $('zoomValue').textContent = Number(zoom.value).toFixed(1) + '×';
+      zoomBox.hidden = false;
+    }
+    const settings = scanner.getRunningTrackSettings();
+    capability.textContent = 'Caméra active : ' + (settings.width || '?') + ' × ' + (settings.height || '?') + ' pixels. Place le code en entier dans le cadre.';
+  } catch (e) {
+    capability.textContent = 'Caméra active. Place le code en entier dans le cadre.';
   }
-  if(u.protocol!=='https:' || u.hostname.toLowerCase()!=='apps.powerapps.com'){
-    error.textContent='Pour ta sécurité, seul le domaine officiel apps.powerapps.com est accepté.';
-    return;
+}
+
+async function startCamera() {
+  if (isScanning) return;
+  if (stopping) await stopping;
+  if (!window.isSecureContext) { status.textContent = 'La caméra exige HTTPS.'; return; }
+  start.disabled = true;
+  error.textContent = 'Aucun code transmis.';
+  try {
+    const reader = getScanner();
+    const chosenCamera = cameraSelect.value ? cameraSelect.value : { facingMode: 'environment' };
+    await reader.start(
+      chosenCamera,
+      {
+        fps: 10,
+        aspectRatio: 4 / 3,
+        qrbox: (width, height) => {
+          // Zone très large et peu haute, plus adaptée aux codes-barres 1D qu'un carré.
+          const w = Math.max(80, Math.min(width - 12, Math.floor(width * 0.92)));
+          const h = Math.max(60, Math.min(height - 12, Math.floor(w * 0.35)));
+          return { width: w, height: h };
+        }
+      },
+      decoded => { setCode(decoded); },
+      () => { /* Échec normal sur les images sans code ; continuer le balayage. */ }
+    );
+    isScanning = true;
+    start.disabled = true;
+    stop.disabled = false;
+    status.textContent = 'Recherche d’un code-barres…';
+    setupCameraTools();
+  } catch (e) {
+    start.disabled = false;
+    status.textContent = 'Impossible de démarrer le lecteur : ' + (e?.message || String(e));
   }
-  u.searchParams.set('bobine',bobine);
-  window.location.assign(u.toString());
+}
+
+async function listCameras() {
+  try {
+    getScanner();
+    const cameras = await Html5Qrcode.getCameras();
+    const existing = cameraSelect.value;
+    cameraSelect.innerHTML = '<option value="">Arrière (automatique)</option>';
+    for (const cam of cameras) {
+      const option = document.createElement('option');
+      option.value = cam.id;
+      option.textContent = cam.label || 'Caméra ' + (cameraSelect.options.length);
+      cameraSelect.appendChild(option);
+    }
+    if ([...cameraSelect.options].some(o => o.value === existing)) cameraSelect.value = existing;
+    capability.textContent = cameras.length + ' caméra(s) disponible(s). Si l’image est floue, essaie une autre caméra arrière puis réactive le scan.';
+  } catch (e) {
+    status.textContent = 'Impossible de lister les caméras : ' + (e?.message || String(e));
+  }
+}
+
+start.addEventListener('click', () => { void startCamera(); });
+stop.addEventListener('click', () => { void stopCamera().then(() => {status.textContent = 'Caméra arrêtée';}); });
+$('refreshCameras').addEventListener('click', () => { void listCameras(); });
+cameraSelect.addEventListener('change', async () => {
+  if (isScanning) { await stopCamera(); await startCamera(); }
 });
-window.addEventListener('pagehide',stopCamera);
+
+torchButton.addEventListener('click', async () => {
+  if (!isScanning || !scanner) return;
+  try {
+    const feature = scanner.getRunningTrackCameraCapabilities().torchFeature();
+    await feature.apply(!torchOn);
+    torchOn = !torchOn;
+    torchButton.textContent = torchOn ? 'Éteindre la lampe' : 'Allumer la lampe';
+  } catch (e) { status.textContent = 'Lampe indisponible sur cet appareil.'; }
+});
+
+zoom.addEventListener('input', async () => {
+  $('zoomValue').textContent = Number(zoom.value).toFixed(1) + '×';
+  if (!isScanning || !scanner) return;
+  try {
+    await scanner.getRunningTrackCameraCapabilities().zoomFeature().apply(Number(zoom.value));
+  } catch (e) { status.textContent = 'Zoom non disponible.'; }
+});
+
+$('photo').addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    await stopCamera();
+    const decoded = await getScanner().scanFile(file, false);
+    if (!setCode(decoded)) status.textContent = 'La photo contient un code, mais pas un numéro de bobine reconnu.';
+  } catch (e) {
+    status.textContent = 'Code non détecté sur la photo. Essaie une photo plus nette et bien cadrée.';
+  } finally { event.target.value = ''; }
+});
+
+$('useManual').addEventListener('click', () => { setCode($('manual').value); });
+$('manual').addEventListener('keydown', e => { if (e.key === 'Enter') setCode(e.currentTarget.value); });
+send.addEventListener('click', () => {
+  if (!detectedBobine) return;
+  try {
+    const u = new URL(POWERAPPS_URL);
+    if (u.protocol !== 'https:' || u.hostname.toLowerCase() !== 'apps.powerapps.com') {
+      error.textContent = 'Adresse Power Apps non autorisée.';
+      return;
+    }
+    u.searchParams.set('bobine', detectedBobine);
+    window.location.assign(u.toString());
+  } catch (e) {
+    error.textContent = 'Le lien Power Apps est mal configuré.';
+  }
+});
+window.addEventListener('pagehide', () => { void stopCamera(); });
 </script>
 </body>
 </html>
