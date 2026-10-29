@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="color-scheme" content="light">
-  <title>Lecteur de bobines — LISI</title>
+  <title>Lecteur de bobines — LISI (diagnostic)</title>
   <style>
     :root { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; color:#152236; background:#f4f7fb }
     * {box-sizing:border-box}
@@ -35,9 +35,9 @@
 <body>
 <main>
   <header>
-    <div class="tag">LISI — Barcode Reader</div>
+    <div class="tag">LISI — Barcode Reader · Diagnostic</div>
     <h1>Lecteur de bobines</h1>
-    <p class="hint">Code 39 / Code 128 · caméra arrière · lecture renforcée.</p>
+    <p class="hint">Plusieurs formats 1D · caméra arrière · diagnostic de lecture.</p>
   </header>
 
   <section class="card">
@@ -58,15 +58,16 @@
       <label for="zoom">Zoom : <span id="zoomValue">1×</span></label>
       <input id="zoom" type="range" min="1" max="2" step="0.1" value="1">
     </div>
-    <p id="capability" class="hint">Place le code entier dans la zone de scan, sans être trop près de l'étiquette.</p>
-    <label for="photo">Si la vidéo ne fait pas le point : prendre une photo nette</label>
-    <input id="photo" type="file" accept="image/*" capture="environment">
+    <p id="capability" class="hint">Place tout le code dans le cadre, avec une marge blanche à chaque extrémité. Teste à 15–30 cm, en évitant les reflets.</p>
+    <label for="photo">Essayer une photo déjà prise (galerie) ou une nouvelle photo</label>
+    <input id="photo" type="file" accept="image/*">
     <p class="hint">La photo est lue sur le téléphone, sans envoi à notre serveur.</p>
   </section>
 
   <section class="card">
     <div class="tag">2 — Numéro de bobine</div>
     <div id="value" aria-live="polite">—</div>
+    <p id="rawCode" class="hint" aria-live="polite">Dernier contenu décodé : aucun</p>
     <label for="manual">Ou saisir le code :</label>
     <input id="manual" type="text" autocomplete="off" inputmode="text" placeholder="Ex. T488366604">
     <button id="useManual" class="secondary">Utiliser la saisie</button>
@@ -78,7 +79,7 @@
     <button id="send" disabled>Ouvrir la fiche bobine</button>
     <p id="error" role="alert" class="notice">Aucun code transmis.</p>
   </section>
-  <p class="hint">Le décodeur est fourni par la bibliothèque open source html5-qrcode (v2.3.8). Elle est chargée depuis jsDelivr ; sa disponibilité dépend des règles réseau de ton organisation. Aucun accès direct à SharePoint depuis ce lecteur.</p>
+  <p class="hint">Version de diagnostic : le décodeur html5-qrcode (v2.3.8) vient de jsDelivr. Les images restent sur ce téléphone et ne sont pas envoyées à GitHub. Aucun accès direct à SharePoint.</p>
 </main>
 
 <!-- Bibliothèque open source épinglée sur une version fixe : à héberger localement après validation informatique si nécessaire. -->
@@ -107,6 +108,7 @@ let isScanning = false;
 let torchOn = false;
 let detectedBobine = '';
 let stopping = null;
+let photoErrors = 0;
 
 function cleanCode(raw) {
   const s = String(raw ?? '').trim();
@@ -115,6 +117,7 @@ function cleanCode(raw) {
 }
 
 function setCode(raw) {
+  $('rawCode').textContent = 'Dernier contenu décodé : ' + JSON.stringify(String(raw));
   const code = cleanCode(raw);
   if (!code) {
     status.textContent = 'Code lu mais non reconnu : ' + String(raw).slice(0, 40);
@@ -137,7 +140,14 @@ function getScanner() {
     scanner = new Html5Qrcode('reader', {
       formatsToSupport: [
         Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E
       ],
       useBarCodeDetectorIfSupported: false
     }, false);
@@ -202,13 +212,8 @@ async function startCamera() {
       chosenCamera,
       {
         fps: 10,
-        aspectRatio: 4 / 3,
-        qrbox: (width, height) => {
-          // Zone très large et peu haute, plus adaptée aux codes-barres 1D qu'un carré.
-          const w = Math.max(80, Math.min(width - 12, Math.floor(width * 0.92)));
-          const h = Math.max(60, Math.min(height - 12, Math.floor(w * 0.35)));
-          return { width: w, height: h };
-        }
+        aspectRatio: 4 / 3
+        // Pas de qrbox : on analyse toute la vidéo, y compris les bords du code-barres.
       },
       decoded => { setCode(decoded); },
       () => { /* Échec normal sur les images sans code ; continuer le balayage. */ }
@@ -273,10 +278,14 @@ $('photo').addEventListener('change', async event => {
   if (!file) return;
   try {
     await stopCamera();
-    const decoded = await getScanner().scanFile(file, false);
+    status.textContent = 'Analyse de la photo : ' + file.name + ' (' + Math.round(file.size / 1024) + ' Ko)…';
+    const decoded = await getScanner().scanFile(file, true);
     if (!setCode(decoded)) status.textContent = 'La photo contient un code, mais pas un numéro de bobine reconnu.';
   } catch (e) {
-    status.textContent = 'Code non détecté sur la photo. Essaie une photo plus nette et bien cadrée.';
+    const detail = e && e.message ? e.message : String(e);
+    console.error('Erreur scan photo', e);
+    status.textContent = 'Échec de lecture photo — détail : ' + detail.slice(0, 260);
+    error.textContent = 'Si la photo est nette, essaie de la recadrer sur le seul code-barres en gardant les deux marges blanches. Le détail ci-dessus permettra de diagnostiquer l’erreur.';
   } finally { event.target.value = ''; }
 });
 
