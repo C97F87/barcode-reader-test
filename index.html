@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
-<title>LISI — Lecteur de bobines (3 moteurs)</title>
+<title>LISI — Lecteur de bobines (Natif + ZBar)</title>
 <style>
 :root{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#152236;background:#f4f7fb}
 *{box-sizing:border-box}
@@ -34,9 +34,9 @@ input,select{width:100%;font:inherit;padding:10px;border:1px solid #aab7c7;borde
 <body>
 <main>
 <header>
-<div class="tag">LISI · Barcode Reader · 3 moteurs</div>
+<div class="tag">LISI · Barcode Reader · Natif + ZBar</div>
 <h1>Scanner une bobine</h1>
-<p class="hint">Natif Edge + ZXing + ZBar, sur une seule caméra arrière. Code-barres Code 128 / 39.</p>
+<p class="hint">Lecture combinée Natif Edge + ZBar. La caméra choisie est mémorisée sur ce téléphone.</p>
 </header>
 <section class="card">
 <div class="tag">1 — Caméra et diagnostic</div>
@@ -44,11 +44,11 @@ input,select{width:100%;font:inherit;padding:10px;border:1px solid #aab7c7;borde
 <video id="video" autoplay muted playsinline></video>
 <label for="camera">Caméra</label>
 <select id="camera"><option value="">Caméra arrière automatique</option></select>
+<p class="hint" id="cameraInfo">Choisis une fois la caméra qui fonctionne : elle sera réutilisée lors des prochaines visites.</p>
 <div class="row"><button id="start">Activer la caméra</button><button id="stop" class="secondary" disabled>Arrêter</button></div>
 <button id="list" class="secondary">Lister les caméras</button>
 <div class="engines">
 <div class="engine"><strong>Natif Edge</strong><span id="nativeState">Vérification…</span></div>
-<div class="engine"><strong>ZXing</strong><span id="zxingState">Vérification…</span></div>
 <div class="engine"><strong>ZBar</strong><span id="zbarState">Vérification…</span></div>
 </div>
 <label for="photo">Analyser une photo de l'étiquette</label>
@@ -69,10 +69,9 @@ input,select{width:100%;font:inherit;padding:10px;border:1px solid #aab7c7;borde
 <div class="notice" id="message" role="status">Le lien Power Apps est enregistré. Aucune bobine envoyée avant ton clic.</div>
 </section>
 <details class="card"><summary>Diagnostic avancé</summary><p id="debug">—</p></details>
-<p class="hint">Cette version utilise trois moteurs indépendants. Les images sont analysées localement dans le navigateur ; leurs bibliothèques sont chargées depuis jsDelivr. Le site GitHub Pages reste public ; l'usage professionnel est soumis aux règles informatiques LISI.</p>
+<p class="hint">Cette version utilise deux moteurs indépendants. Les images sont analysées localement dans le navigateur ; ZBar est chargé depuis jsDelivr. Le site GitHub Pages reste public ; l'usage professionnel est soumis aux règles informatiques LISI.</p>
 </main>
-<!-- Deux bibliothèques indépendantes. Le moteur natif est fourni par Edge. Versions fixées. -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js"></script>
+<!-- ZBar est chargé en secours ; le moteur natif est fourni par Edge. -->
 <script src="https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/index.js"></script>
 <script>
 'use strict';
@@ -82,12 +81,12 @@ const video = byId('video'), status = byId('status'), send = byId('send');
 const canvas = document.createElement('canvas');
 const ctx = canvas.getContext('2d', {willReadFrequently:true});
 let stream = null, running = false, working = false, scannerToken = 0;
-let nativeDetector = null, zxingReader = null, confirmedNumber = '', engineIndex = 0;
+let nativeDetector = null, confirmedNumber = '', engineIndex = 0;
 let lastAttempt = 0, seen = null;
-const engines = ['native','zxing','zbar'];
-const engineNames = {native:'Natif Edge',zxing:'ZXing',zbar:'ZBar'};
-const stateIds = {native:'nativeState',zxing:'zxingState',zbar:'zbarState'};
-const available = {native:false,zxing:false,zbar:false};
+const engines = ['native','native','zbar']; // Priorité au natif : 2 passages sur 3 ; ZBar en secours.
+const engineNames = {native:'Natif Edge',zbar:'ZBar'};
+const stateIds = {native:'nativeState',zbar:'zbarState'};
+const available = {native:false,zbar:false};
 let recentDebug = [];
 function log(message) {
   const stamp = new Date().toLocaleTimeString('fr-FR');
@@ -154,10 +153,6 @@ async function initEngines() {
       else state('native','Code 128/39 indisponible');
     }catch(e){state('native','Erreur : '+e.message);log('Natif : '+e.message);}
   } else state('native','Non disponible sur ce navigateur');
-  if(typeof ZXingBrowser !== 'undefined' && typeof ZXingBrowser.BrowserMultiFormatOneDReader==='function') {
-    try {zxingReader=new ZXingBrowser.BrowserMultiFormatOneDReader();available.zxing=true;state('zxing','Prêt');}
-    catch(e){state('zxing','Erreur : '+e.message);log('ZXing : '+e.message);}
-  }else state('zxing','Bibliothèque non chargée');
   if(typeof zbarWasm!=='undefined' && typeof zbarWasm.scanImageData==='function') {
     available.zbar=true;state('zbar','Prêt (chargement WASM au 1er scan)');
   }else state('zbar','Bibliothèque non chargée');
@@ -179,15 +174,6 @@ async function decode(engine, c) {
   if(engine==='native'){
     const items=await nativeDetector.detect(c);
     return items.map(x=>({raw:x.rawValue,format:x.format}));
-  }
-  if(engine==='zxing'){
-    try {
-      const result=zxingReader.decodeFromCanvas(c);
-      return [{raw:result.getText(),format:'1D'}];
-    }catch(e){
-      if(!/NotFound|Checksum|FormatException|No MultiFormat|not found/i.test(String(e?.name||'')+' '+String(e?.message||'')))throw e;
-      return [];
-    }
   }
   if(engine==='zbar'){
     const data=c.getContext('2d',{willReadFrequently:true}).getImageData(0,0,c.width,c.height);
@@ -213,14 +199,14 @@ async function stopCamera(){
 }
 async function tick(time, token){
   if(!running||token!==scannerToken)return;
-  // Les trois moteurs alternent : moins de consommation qu'un triple décodage simultané.
+  // Le natif reçoit 2 passages sur 3, ZBar prend le troisième.
   if(!working&&time-lastAttempt>=300&&video.readyState>=2){
     working=true;lastAttempt=time;
     try{
       if(snapshot(video)){
         let engine;
         for(let attempts=0;attempts<3;attempts++){
-          const candidate=engines[engineIndex%3]; engineIndex++;
+          const candidate=engines[engineIndex%engines.length]; engineIndex++;
           if(available[candidate]){engine=candidate;break;}
         }
         if(engine){
@@ -238,9 +224,27 @@ byId('start').addEventListener('click',async()=>{
   if(!navigator.mediaDevices?.getUserMedia){status.textContent='Caméra indisponible : ouverture HTTPS nécessaire.';return;}
   if(!engines.some(e=>available[e])){status.textContent='Aucun décodeur disponible. Vérifie le chargement des bibliothèques.';return;}
   try{
-    const preferred=byId('camera').value;
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:preferred?{deviceId:{exact:preferred}}:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    // L'ID d'une caméra sélectionnée est enregistré localement sur ce téléphone.
+    // Un identifiant n'est jamais codé en dur : il peut changer d'un appareil à l'autre.
+    let preferred=byId('camera').value || readPreference(CAMERA_ID_KEY);
+    let selectedCamera=preferred ? {deviceId:{exact:preferred},width:{ideal:1920},height:{ideal:1080}} :
+      {facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}};
+    try {
+      stream=await navigator.mediaDevices.getUserMedia({audio:false,video:selectedCamera});
+    } catch(e) {
+      // En cas de réinitialisation des permissions ou changement de téléphone,
+      // ne pas rester bloqué sur un ID périmé.
+      if (!preferred || !['OverconstrainedError','NotFoundError'].includes(e.name)) throw e;
+      log('Caméra enregistrée indisponible : '+e.name+'; retour à la sélection automatique.');
+      clearPreference(CAMERA_ID_KEY);
+      clearPreference(CAMERA_LABEL_KEY);
+      byId('camera').value='';
+      preferred='';
+      stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+      byId('cameraInfo').textContent='Caméra mémorisée introuvable : sélectionne à nouveau la caméra qui fonctionne.';
+    }
     video.srcObject=stream;await video.play();
+    await listCameras(stream.getVideoTracks()[0]?.getSettings?.().deviceId || '');
     running=true;seen=null;lastAttempt=0;engineIndex=0;
     byId('start').disabled=true;byId('stop').disabled=false;
     status.textContent='Analyse des images avec les moteurs disponibles…';
@@ -249,13 +253,58 @@ byId('start').addEventListener('click',async()=>{
   }catch(e){status.textContent='Caméra inaccessible : '+(e?.message||String(e));await stopCamera();}
 });
 byId('stop').addEventListener('click',()=>{void stopCamera();status.textContent='Caméra arrêtée';});
-byId('list').addEventListener('click',async()=>{
+// La préférence est uniquement enregistrée dans ce navigateur (pas dans GitHub ou Power Apps).
+const CAMERA_ID_KEY='lisi_pref_camera_id_v1';
+const CAMERA_LABEL_KEY='lisi_pref_camera_label_v1';
+function readPreference(key){try{return localStorage.getItem(key)||'';}catch{return '';}}
+function savePreference(key,val){try{localStorage.setItem(key,val);}catch{log('Mémoire caméra indisponible dans ce navigateur.');}}
+function clearPreference(key){try{localStorage.removeItem(key);}catch{}}
+async function listCameras(activeId=''){
   try {
     const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
-    const sel=byId('camera');sel.innerHTML='<option value="">Caméra arrière automatique</option>';
-    for(const d of devices){const opt=document.createElement('option');opt.value=d.deviceId;opt.textContent=d.label||'Caméra '+sel.options.length;sel.appendChild(opt);}
-    status.textContent=devices.length+' caméra(s) détectée(s)';
-  }catch(e){status.textContent='Erreur liste des caméras : '+e.message;}
+    const sel=byId('camera');
+    const current=sel.value;
+    const savedId=readPreference(CAMERA_ID_KEY);
+    const savedLabel=readPreference(CAMERA_LABEL_KEY);
+    sel.innerHTML='<option value="">Caméra arrière automatique</option>';
+    for (let i=0;i<devices.length;i++) {
+      const d=devices[i];
+      const opt=document.createElement('option');
+      opt.value=d.deviceId;
+      opt.textContent=d.label || ('Caméra '+i);
+      sel.appendChild(opt);
+    }
+    const idInList=id=>id && devices.some(d=>d.deviceId===id);
+    let target='';
+    if(idInList(current)) target=current;
+    else if(idInList(savedId)) target=savedId;
+    else if(savedLabel) {
+      const match=devices.find(d=>d.label && d.label===savedLabel);
+      if(match) {target=match.deviceId;savePreference(CAMERA_ID_KEY,target);}
+    }
+    if(!target && idInList(activeId)) target=activeId;
+    sel.value=target;
+    byId('cameraInfo').textContent=target && target===readPreference(CAMERA_ID_KEY)
+      ? 'Caméra préférée enregistrée sur ce téléphone : '+(devices.find(d=>d.deviceId===target)?.label||'caméra sélectionnée')
+      : 'Sélectionne la caméra qui lit correctement, puis active-la : ce choix sera mémorisé.';
+    log(devices.length+' caméra(s) trouvée(s), sélection : '+(sel.selectedOptions[0]?.textContent||'automatique'));
+  }catch(e){log('Liste caméras : '+e.message);}
+}
+byId('list').addEventListener('click',async()=>{
+  await listCameras();
+  status.textContent='Caméras listées : choisis la caméra qui fonctionne.';
+});
+byId('camera').addEventListener('change',()=>{
+  const sel=byId('camera');
+  if(sel.value) {
+    savePreference(CAMERA_ID_KEY,sel.value);
+    savePreference(CAMERA_LABEL_KEY,sel.selectedOptions[0]?.textContent||'');
+    byId('cameraInfo').textContent='Caméra mémorisée. Elle sera sélectionnée automatiquement lors des prochains scans.';
+  }else{
+    clearPreference(CAMERA_ID_KEY);clearPreference(CAMERA_LABEL_KEY);
+    byId('cameraInfo').textContent='Mode caméra automatique restauré.';
+  }
+  if(running)status.textContent='Caméra modifiée : clique sur Arrêter puis Activer la caméra pour appliquer ce choix.';
 });
 async function drawPhoto(file){
   if(typeof createImageBitmap==='function'){
@@ -340,6 +389,8 @@ send.addEventListener('click',()=>{
 });
 window.addEventListener('pagehide',()=>{void stopCamera();});
 void initEngines();
+// Restaurer le choix mémorisé lorsque le navigateur a accès à la liste de caméras.
+void listCameras();
 </script>
 </body>
 </html>
