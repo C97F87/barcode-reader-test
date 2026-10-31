@@ -1,311 +1,345 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="color-scheme" content="light">
-  <title>Lecteur de bobines — LISI (diagnostic)</title>
-  <style>
-    :root { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; color:#152236; background:#f4f7fb }
-    * {box-sizing:border-box}
-    body {margin:0; padding:18px 14px 40px}
-    main {max-width:540px; margin:auto}
-    h1 {font-size:1.55rem; margin:0 0 6px}
-    p {line-height:1.45}
-    small,.hint {color:#556576}
-    .card {background:#fff; border:1px solid #dfe5eb; border-radius:16px; padding:16px; margin:14px 0; box-shadow:0 1px 5px #14243a09}
-    .tag {font-size:.75rem; text-transform:uppercase; font-weight:700; letter-spacing:.07em; color:#556576}
-    #status {font-size:1.04rem; font-weight:650; min-height:1.5em}
-    #value {font-size:clamp(1.65rem,6vw,2.2rem); font-weight:750; letter-spacing:.04em; overflow-wrap:anywhere; min-height:2.5rem; margin:10px 0}
-    #reader {width:100%; overflow:hidden; border-radius:12px; background:#152236; min-height:180px}
-    #reader video {width:100%; object-fit:cover; border-radius:12px}
-    button {appearance:none; border:0; background:#124fbc; color:white; border-radius:10px; padding:12px 14px; font-weight:650; font-size:1rem; cursor:pointer; width:100%; margin:6px 0}
-    button.secondary {background:#e9eef5; color:#142236}
-    button:disabled {opacity:.48;cursor:not-allowed}
-    label {display:block; margin:12px 0 5px; font-weight:600}
-    input[type="text"],select {width:100%; border:1px solid #aab7c7; border-radius:9px; padding:11px; font:inherit; background:white}
-    input[type="range"] {width:100%}
-    input[type="file"] {width:100%;margin-top:9px}
-    .notice {padding:10px 12px; background:#f8fafc; border-radius:9px; color:#44556a; font-size:.87rem}
-    .pair {display:grid; grid-template-columns:1fr 1fr; gap:8px}
-    .pair button {font-size:.9rem}
-    [hidden] {display:none!important}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>LISI — Lecteur de bobines (3 moteurs)</title>
+<style>
+:root{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#152236;background:#f4f7fb}
+*{box-sizing:border-box}
+body{margin:0;padding:16px 13px 35px}
+main{max-width:540px;margin:auto}
+h1{font-size:1.55rem;margin:4px 0 5px}
+p{line-height:1.45}
+.hint{color:#546679;font-size:.88rem}
+.tag{color:#607084;letter-spacing:.07em;font-size:.71rem;font-weight:750;text-transform:uppercase}
+.card{background:white;border:1px solid #dfe5eb;border-radius:16px;padding:15px;margin:13px 0;box-shadow:0 1px 5px #14243a09}
+#status{font-size:1rem;font-weight:700;min-height:1.6em}
+video{display:block;width:100%;max-height:340px;aspect-ratio:4/3;border-radius:12px;object-fit:contain;background:#152236}
+button{appearance:none;border:0;background:#00477c;color:white;border-radius:9px;padding:12px;font-weight:700;font-size:1rem;width:100%;cursor:pointer;margin:5px 0}
+button.secondary{background:#e9eef5;color:#142236}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+label{display:block;font-weight:650;margin:10px 0 5px}
+input,select{width:100%;font:inherit;padding:10px;border:1px solid #aab7c7;border-radius:8px;background:white}
+#value{font-size:clamp(1.6rem,6vw,2rem);font-weight:800;letter-spacing:.03em;min-height:2rem;margin:6px 0}
+.notice{font-size:.84rem;background:#edf3f9;color:#40536a;padding:10px;border-radius:9px;overflow-wrap:anywhere}
+.engines{display:grid;grid-template-columns:1fr;gap:6px;margin:10px 0}
+.engine{display:flex;justify-content:space-between;gap:10px;font-size:.88rem;border:1px solid #e1e6ed;border-radius:8px;padding:8px 10px}
+.engine span:last-child{text-align:right;overflow-wrap:anywhere;color:#44566b}
+#debug{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.79rem;color:#4e6070}
+[hidden]{display:none!important}
+</style>
 </head>
 <body>
 <main>
-  <header>
-    <div class="tag">LISI — Barcode Reader · Diagnostic</div>
-    <h1>Lecteur de bobines</h1>
-    <p class="hint">Plusieurs formats 1D · caméra arrière · diagnostic de lecture.</p>
-  </header>
-
-  <section class="card">
-    <div class="tag">1 — Scanner</div>
-    <p id="status" role="status">En attente de scan</p>
-    <div id="reader"></div>
-    <label for="camera">Caméra</label>
-    <select id="camera"><option value="">Arrière (automatique)</option></select>
-    <div class="pair">
-      <button id="start">Activer la caméra</button>
-      <button id="stop" class="secondary" disabled>Arrêter</button>
-    </div>
-    <div class="pair">
-      <button id="torch" class="secondary" hidden>Allumer la lampe</button>
-      <button id="refreshCameras" class="secondary">Lister les caméras</button>
-    </div>
-    <div id="zoomBox" hidden>
-      <label for="zoom">Zoom : <span id="zoomValue">1×</span></label>
-      <input id="zoom" type="range" min="1" max="2" step="0.1" value="1">
-    </div>
-    <p id="capability" class="hint">Place tout le code dans le cadre, avec une marge blanche à chaque extrémité. Teste à 15–30 cm, en évitant les reflets.</p>
-    <label for="photo">Essayer une photo déjà prise (galerie) ou une nouvelle photo</label>
-    <input id="photo" type="file" accept="image/*">
-    <p class="hint">La photo est lue sur le téléphone, sans envoi à notre serveur.</p>
-  </section>
-
-  <section class="card">
-    <div class="tag">2 — Numéro de bobine</div>
-    <div id="value" aria-live="polite">—</div>
-    <p id="rawCode" class="hint" aria-live="polite">Dernier contenu décodé : aucun</p>
-    <label for="manual">Ou saisir le code :</label>
-    <input id="manual" type="text" autocomplete="off" inputmode="text" placeholder="Ex. T488366604">
-    <button id="useManual" class="secondary">Utiliser la saisie</button>
-  </section>
-
-  <section class="card">
-    <div class="tag">3 — Ouvrir Power Apps</div>
-    <p class="hint">Le lien professionnel est déjà enregistré. Rien à copier-coller.</p>
-    <button id="send" disabled>Ouvrir la fiche bobine</button>
-    <p id="error" role="alert" class="notice">Aucun code transmis.</p>
-  </section>
-  <p class="hint">Version de diagnostic : le décodeur html5-qrcode (v2.3.8) vient de jsDelivr. Les images restent sur ce téléphone et ne sont pas envoyées à GitHub. Aucun accès direct à SharePoint.</p>
+<header>
+<div class="tag">LISI · Barcode Reader · 3 moteurs</div>
+<h1>Scanner une bobine</h1>
+<p class="hint">Natif Edge + ZXing + ZBar, sur une seule caméra arrière. Code-barres Code 128 / 39.</p>
+</header>
+<section class="card">
+<div class="tag">1 — Caméra et diagnostic</div>
+<p id="status" role="status">Chargement des décodeurs…</p>
+<video id="video" autoplay muted playsinline></video>
+<label for="camera">Caméra</label>
+<select id="camera"><option value="">Caméra arrière automatique</option></select>
+<div class="row"><button id="start">Activer la caméra</button><button id="stop" class="secondary" disabled>Arrêter</button></div>
+<button id="list" class="secondary">Lister les caméras</button>
+<div class="engines">
+<div class="engine"><strong>Natif Edge</strong><span id="nativeState">Vérification…</span></div>
+<div class="engine"><strong>ZXing</strong><span id="zxingState">Vérification…</span></div>
+<div class="engine"><strong>ZBar</strong><span id="zbarState">Vérification…</span></div>
+</div>
+<label for="photo">Analyser une photo de l'étiquette</label>
+<input id="photo" type="file" accept="image/*">
+<p class="hint">Pour la caméra : garde des marges blanches autour des barres, évite les reflets et approche progressivement l'étiquette.</p>
+</section>
+<section class="card">
+<div class="tag">2 — Numéro de bobine</div>
+<div id="value" aria-live="polite">—</div>
+<p class="hint" id="source">En attente de lecture</p>
+<label for="manual">Saisie manuelle de secours</label>
+<input id="manual" type="text" inputmode="text" autocomplete="off" placeholder="Ex. T478540301">
+<button class="secondary" id="useManual">Utiliser la saisie</button>
+</section>
+<section class="card">
+<div class="tag">3 — Power Apps</div>
+<button id="send" disabled>Ouvrir la fiche bobine</button>
+<div class="notice" id="message" role="status">Le lien Power Apps est enregistré. Aucune bobine envoyée avant ton clic.</div>
+</section>
+<details class="card"><summary>Diagnostic avancé</summary><p id="debug">—</p></details>
+<p class="hint">Cette version utilise trois moteurs indépendants. Les images sont analysées localement dans le navigateur ; leurs bibliothèques sont chargées depuis jsDelivr. Le site GitHub Pages reste public ; l'usage professionnel est soumis aux règles informatiques LISI.</p>
 </main>
-
-<!-- Bibliothèque open source épinglée sur une version fixe : à héberger localement après validation informatique si nécessaire. -->
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- Deux bibliothèques indépendantes. Le moteur natif est fourni par Edge. Versions fixées. -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/index.js"></script>
 <script>
 'use strict';
-
-// URL professionnelle fournie pour le projet Barcode Reader. Pas de jeton d'authentification.
 const POWERAPPS_URL = 'https://apps.powerapps.com/play/e/default-2da651fa-07e9-4e14-8225-3979c556c063/a/81fbe4f7-ce8f-4592-ab96-1d712d44a0db?tenantId=2da651fa-07e9-4e14-8225-3979c556c063';
-
-const $ = id => document.getElementById(id);
-const status = $('status');
-const value = $('value');
-const capability = $('capability');
-const start = $('start');
-const stop = $('stop');
-const send = $('send');
-const error = $('error');
-const cameraSelect = $('camera');
-const torchButton = $('torch');
-const zoomBox = $('zoomBox');
-const zoom = $('zoom');
-
-let scanner = null;
-let isScanning = false;
-let torchOn = false;
-let detectedBobine = '';
-let stopping = null;
-let photoErrors = 0;
-
-function cleanCode(raw) {
-  const s = String(raw ?? '').trim();
-  const match = /^T?(\d{6,16})$/i.exec(s);
+const byId = id => document.getElementById(id);
+const video = byId('video'), status = byId('status'), send = byId('send');
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d', {willReadFrequently:true});
+let stream = null, running = false, working = false, scannerToken = 0;
+let nativeDetector = null, zxingReader = null, confirmedNumber = '', engineIndex = 0;
+let lastAttempt = 0, seen = null;
+const engines = ['native','zxing','zbar'];
+const engineNames = {native:'Natif Edge',zxing:'ZXing',zbar:'ZBar'};
+const stateIds = {native:'nativeState',zxing:'zxingState',zbar:'zbarState'};
+const available = {native:false,zxing:false,zbar:false};
+let recentDebug = [];
+function log(message) {
+  const stamp = new Date().toLocaleTimeString('fr-FR');
+  recentDebug.unshift(stamp+' — '+message);
+  recentDebug = recentDebug.slice(0,22);
+  byId('debug').textContent = recentDebug.join('\n');
+}
+function state(engine,message){byId(stateIds[engine]).textContent=message;}
+// Lecture automatique : on exige le préfixe T des étiquettes LISI.
+function getNumber(raw, manual=false) {
+  const text = String(raw ?? '').trim();
+  const expression = manual ? /^T?(\d{6,16})$/i : /^T(\d{6,16})$/i;
+  const match = expression.exec(text);
   return match ? match[1] : '';
 }
-
-function setCode(raw) {
-  $('rawCode').textContent = 'Dernier contenu décodé : ' + JSON.stringify(String(raw));
-  const code = cleanCode(raw);
-  if (!code) {
-    status.textContent = 'Code lu mais non reconnu : ' + String(raw).slice(0, 40);
+function acceptNumber(number,engine,raw) {
+  confirmedNumber = number;
+  byId('value').textContent = number;
+  byId('source').textContent = 'Confirmé par '+engineNames[engine]+' : '+raw;
+  status.textContent='Bobine détectée';
+  send.disabled=false;
+  byId('message').textContent='Bobine '+number+' prête à ouvrir dans Power Apps.';
+  if(navigator.vibrate)navigator.vibrate(80);
+  void stopCamera();
+}
+function registerCandidate(raw, engine, photo=false) {
+  const clean = getNumber(raw);
+  if(!clean) {
+    if(raw) log(engineNames[engine]+' : autre contenu détecté '+JSON.stringify(String(raw).slice(0,80)));
     return false;
   }
-  detectedBobine = code;
-  value.textContent = code;
-  status.textContent = 'Bobine détectée';
-  send.disabled = false;
-  if (navigator.vibrate) navigator.vibrate(100);
-  void stopCamera();
+  state(engine,'T'+clean+' reconnu');
+  log(engineNames[engine]+' a lu T'+clean+(photo?' (photo)':''));
+  // Sur une photo unique, on permet la confirmation manuelle depuis l'écran :
+  // aucune navigation vers Power Apps n'est automatique.
+  if(photo) {
+    confirmedNumber=clean;
+    byId('value').textContent=clean;
+    byId('source').textContent='Photo lue par '+engineNames[engine]+' — vérifier le numéro avant ouverture';
+    status.textContent='Code détecté sur la photo';
+    send.disabled=false;
+    return true;
+  }
+  const now=Date.now();
+  if(!seen || seen.n!==clean || now-seen.last>6000) {
+    seen={n:clean, last:now, attempts:1, engines:new Set([engine])};
+  } else {
+    seen.attempts++;
+    seen.engines.add(engine);
+    seen.last=now;
+  }
+  byId('value').textContent=clean;
+  byId('source').textContent='Vérification du numéro… ('+seen.attempts+' lecture(s), '+Array.from(seen.engines).map(e=>engineNames[e]).join(' + ')+')';
+  // 2 moteurs concordants OU 3 lectures concordantes d'un moteur.
+  if(seen.engines.size>=2 || seen.attempts>=3){acceptNumber(clean,engine,raw);return true;}
+  return false;
+}
+async function initEngines() {
+  if('BarcodeDetector' in window) {
+    try {
+      const formats=await BarcodeDetector.getSupportedFormats();
+      const selected=['code_128','code_39'].filter(f=>formats.includes(f));
+      if(selected.length){nativeDetector=new BarcodeDetector({formats:selected});available.native=true;state('native','Prêt ('+selected.join(', ')+')');}
+      else state('native','Code 128/39 indisponible');
+    }catch(e){state('native','Erreur : '+e.message);log('Natif : '+e.message);}
+  } else state('native','Non disponible sur ce navigateur');
+  if(typeof ZXingBrowser !== 'undefined' && typeof ZXingBrowser.BrowserMultiFormatOneDReader==='function') {
+    try {zxingReader=new ZXingBrowser.BrowserMultiFormatOneDReader();available.zxing=true;state('zxing','Prêt');}
+    catch(e){state('zxing','Erreur : '+e.message);log('ZXing : '+e.message);}
+  }else state('zxing','Bibliothèque non chargée');
+  if(typeof zbarWasm!=='undefined' && typeof zbarWasm.scanImageData==='function') {
+    available.zbar=true;state('zbar','Prêt (chargement WASM au 1er scan)');
+  }else state('zbar','Bibliothèque non chargée');
+  const ready=engines.filter(e=>available[e]);
+  status.textContent=ready.length?'Moteurs disponibles : '+ready.map(e=>engineNames[e]).join(', '):'Aucun moteur disponible (réseau ou navigateur).';
+  log('Moteurs disponibles : '+ready.join(', '));
+}
+function snapshot(source, maxDim=1700) {
+  const w=source.videoWidth || source.width;
+  const h=source.videoHeight || source.height;
+  if(!w||!h)return false;
+  const factor=Math.min(1,maxDim/Math.max(w,h));
+  canvas.width=Math.max(1,Math.round(w*factor));
+  canvas.height=Math.max(1,Math.round(h*factor));
+  ctx.drawImage(source,0,0,canvas.width,canvas.height);
   return true;
 }
-
-function getScanner() {
-  if (typeof Html5Qrcode === 'undefined' || typeof Html5QrcodeSupportedFormats === 'undefined') {
-    throw new Error('Le module de lecture est indisponible. Le réseau bloque peut-être jsDelivr.');
+async function decode(engine, c) {
+  if(engine==='native'){
+    const items=await nativeDetector.detect(c);
+    return items.map(x=>({raw:x.rawValue,format:x.format}));
   }
-  if (!scanner) {
-    scanner = new Html5Qrcode('reader', {
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.CODE_93,
-        Html5QrcodeSupportedFormats.ITF,
-        Html5QrcodeSupportedFormats.CODABAR,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E
-      ],
-      useBarCodeDetectorIfSupported: true
-    }, false);
-  }
-  return scanner;
-}
-
-function hideCameraTools() {
-  torchOn = false;
-  torchButton.hidden = true;
-  torchButton.textContent = 'Allumer la lampe';
-  zoomBox.hidden = true;
-}
-
-async function stopCamera() {
-  if (stopping) return stopping;
-  if (!isScanning || !scanner) return;
-  isScanning = false;
-  start.disabled = false;
-  stop.disabled = true;
-  hideCameraTools();
-  stopping = (async () => {
-    try { await scanner.stop(); } catch (e) { console.warn('Arrêt caméra :', e); }
-    try { scanner.clear(); } catch (e) { console.warn('Nettoyage caméra :', e); }
-  })();
-  try { await stopping; } finally { stopping = null; }
-}
-
-function setupCameraTools() {
-  hideCameraTools();
-  try {
-    const caps = scanner.getRunningTrackCameraCapabilities();
-    const torch = caps.torchFeature();
-    if (torch && torch.isSupported()) torchButton.hidden = false;
-    const zoomCap = caps.zoomFeature();
-    if (zoomCap && zoomCap.isSupported()) {
-      zoom.min = String(zoomCap.min());
-      zoom.max = String(zoomCap.max());
-      zoom.step = String(zoomCap.step() || 0.1);
-      const current = Number(zoomCap.value() ?? zoomCap.min());
-      zoom.value = String(Math.max(zoomCap.min(), Math.min(current, zoomCap.max())));
-      $('zoomValue').textContent = Number(zoom.value).toFixed(1) + '×';
-      zoomBox.hidden = false;
+  if(engine==='zxing'){
+    try {
+      const result=zxingReader.decodeFromCanvas(c);
+      return [{raw:result.getText(),format:'1D'}];
+    }catch(e){
+      if(!/NotFound|Checksum|FormatException|No MultiFormat|not found/i.test(String(e?.name||'')+' '+String(e?.message||'')))throw e;
+      return [];
     }
-    const settings = scanner.getRunningTrackSettings();
-    capability.textContent = 'Caméra active : ' + (settings.width || '?') + ' × ' + (settings.height || '?') + ' pixels. Place le code en entier dans le cadre.';
-  } catch (e) {
-    capability.textContent = 'Caméra active. Place le code en entier dans le cadre.';
   }
-}
-
-async function startCamera() {
-  if (isScanning) return;
-  if (stopping) await stopping;
-  if (!window.isSecureContext) { status.textContent = 'La caméra exige HTTPS.'; return; }
-  start.disabled = true;
-  error.textContent = 'Aucun code transmis.';
-  try {
-    const reader = getScanner();
-    const chosenCamera = cameraSelect.value ? cameraSelect.value : { facingMode: 'environment' };
-    await reader.start(
-      chosenCamera,
-      {
-        fps: 10,
-        aspectRatio: 4 / 3
-        // Pas de qrbox : on analyse toute la vidéo, y compris les bords du code-barres.
-      },
-      decoded => { setCode(decoded); },
-      () => { /* Échec normal sur les images sans code ; continuer le balayage. */ }
-    );
-    isScanning = true;
-    start.disabled = true;
-    stop.disabled = false;
-    status.textContent = 'Recherche d’un code-barres…';
-    setupCameraTools();
-  } catch (e) {
-    start.disabled = false;
-    status.textContent = 'Impossible de démarrer le lecteur : ' + (e?.message || String(e));
+  if(engine==='zbar'){
+    const data=c.getContext('2d',{willReadFrequently:true}).getImageData(0,0,c.width,c.height);
+    const symbols=await zbarWasm.scanImageData(data);
+    return Array.from(symbols||[]).map(x=>({raw:x.decode(),format:x.typeName || String(x.type||'')}));
   }
+  return [];
 }
-
-async function listCameras() {
+async function decodeUsingEngine(engine, c, isPhoto=false) {
+  const results=await decode(engine,c);
+  for(const result of results){
+    if(registerCandidate(result.raw,engine,isPhoto))return true;
+  }
+  return false;
+}
+async function stopCamera(){
+  running=false;
+  scannerToken++;
+  if(stream){for(const track of stream.getTracks())track.stop();stream=null;}
+  video.srcObject=null;
+  byId('start').disabled=false;
+  byId('stop').disabled=true;
+}
+async function tick(time, token){
+  if(!running||token!==scannerToken)return;
+  // Les trois moteurs alternent : moins de consommation qu'un triple décodage simultané.
+  if(!working&&time-lastAttempt>=300&&video.readyState>=2){
+    working=true;lastAttempt=time;
+    try{
+      if(snapshot(video)){
+        let engine;
+        for(let attempts=0;attempts<3;attempts++){
+          const candidate=engines[engineIndex%3]; engineIndex++;
+          if(available[candidate]){engine=candidate;break;}
+        }
+        if(engine){
+          try{await decodeUsingEngine(engine,canvas,false);}
+          catch(e){state(engine,'Erreur : '+String(e.message||e).slice(0,90));log('Erreur '+engine+' : '+String(e.message||e).slice(0,140));available[engine]=false;}
+        }
+      }
+    }catch(e){status.textContent='Erreur de lecture : '+e.message;log('Lecture : '+e.message);}
+    finally{working=false;}
+  }
+  if(running&&token===scannerToken)requestAnimationFrame(t=>tick(t,token));
+}
+byId('start').addEventListener('click',async()=>{
+  if(running)return;
+  if(!navigator.mediaDevices?.getUserMedia){status.textContent='Caméra indisponible : ouverture HTTPS nécessaire.';return;}
+  if(!engines.some(e=>available[e])){status.textContent='Aucun décodeur disponible. Vérifie le chargement des bibliothèques.';return;}
+  try{
+    const preferred=byId('camera').value;
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:preferred?{deviceId:{exact:preferred}}:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    video.srcObject=stream;await video.play();
+    running=true;seen=null;lastAttempt=0;engineIndex=0;
+    byId('start').disabled=true;byId('stop').disabled=false;
+    status.textContent='Analyse des images avec les moteurs disponibles…';
+    const token=++scannerToken;
+    requestAnimationFrame(t=>tick(t,token));
+  }catch(e){status.textContent='Caméra inaccessible : '+(e?.message||String(e));await stopCamera();}
+});
+byId('stop').addEventListener('click',()=>{void stopCamera();status.textContent='Caméra arrêtée';});
+byId('list').addEventListener('click',async()=>{
   try {
-    getScanner();
-    const cameras = await Html5Qrcode.getCameras();
-    const existing = cameraSelect.value;
-    cameraSelect.innerHTML = '<option value="">Arrière (automatique)</option>';
-    for (const cam of cameras) {
-      const option = document.createElement('option');
-      option.value = cam.id;
-      option.textContent = cam.label || 'Caméra ' + (cameraSelect.options.length);
-      cameraSelect.appendChild(option);
+    const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+    const sel=byId('camera');sel.innerHTML='<option value="">Caméra arrière automatique</option>';
+    for(const d of devices){const opt=document.createElement('option');opt.value=d.deviceId;opt.textContent=d.label||'Caméra '+sel.options.length;sel.appendChild(opt);}
+    status.textContent=devices.length+' caméra(s) détectée(s)';
+  }catch(e){status.textContent='Erreur liste des caméras : '+e.message;}
+});
+async function drawPhoto(file){
+  if(typeof createImageBitmap==='function'){
+    const bitmap=await createImageBitmap(file);
+    // Dessiner directement l'image chargée, sans rouvrir la caméra.
+    const factor=Math.min(1,2200/Math.max(bitmap.width,bitmap.height));
+    canvas.width=Math.max(1,Math.round(bitmap.width*factor));canvas.height=Math.max(1,Math.round(bitmap.height*factor));
+    ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
+    return true;
+  }
+  const url=URL.createObjectURL(file);
+  try{
+    const img=new Image();img.src=url;await img.decode();
+    const f=Math.min(1,2200/Math.max(img.naturalWidth,img.naturalHeight));
+    canvas.width=Math.round(img.naturalWidth*f);canvas.height=Math.round(img.naturalHeight*f);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);return true;
+  }finally{URL.revokeObjectURL(url);}
+}
+function makeVariant(original,variant){
+  if(variant==='original')return original;
+  const modified=document.createElement('canvas');
+  const c=modified.getContext('2d',{willReadFrequently:true});
+  if(variant==='middle'){
+    // Rectangle central large, qui laisse une marge autour des barres.
+    const sx=Math.round(original.width*.04),sy=Math.round(original.height*.24);
+    const sw=Math.round(original.width*.92),sh=Math.round(original.height*.52);
+    modified.width=sw;modified.height=sh;c.drawImage(original,sx,sy,sw,sh,0,0,sw,sh);
+    return modified;
+  }
+  modified.width=original.width;modified.height=original.height;
+  c.drawImage(original,0,0);
+  const img=c.getImageData(0,0,modified.width,modified.height);
+  for(let i=0;i<img.data.length;i+=4){
+    const gray=(77*img.data[i]+150*img.data[i+1]+29*img.data[i+2])>>8;
+    const v=gray<165?0:255;
+    img.data[i]=v;img.data[i+1]=v;img.data[i+2]=v;
+  }
+  c.putImageData(img,0,0);return modified;
+}
+byId('photo').addEventListener('change',async event=>{
+  const file=event.target.files?.[0];if(!file)return;
+  await stopCamera();
+  status.textContent='Analyse de la photo avec les moteurs disponibles…';
+  const errors=[];
+  try{
+    await drawPhoto(file);
+    // Conserver un original indépendant des variantes.
+    const original=document.createElement('canvas');original.width=canvas.width;original.height=canvas.height;
+    original.getContext('2d',{willReadFrequently:true}).drawImage(canvas,0,0);
+    for(const variant of ['original','middle','contrast']){
+      const frame=makeVariant(original,variant);
+      for(const engine of engines){
+        if(!available[engine])continue;
+        try{
+          if(await decodeUsingEngine(engine,frame,true)){log('Photo reconnue avec '+engine+' ('+variant+')');return;}
+        }catch(e){errors.push(engine+': '+String(e.message||e));}
+      }
     }
-    if ([...cameraSelect.options].some(o => o.value === existing)) cameraSelect.value = existing;
-    capability.textContent = cameras.length + ' caméra(s) disponible(s). Si l’image est floue, essaie une autre caméra arrière puis réactive le scan.';
-  } catch (e) {
-    status.textContent = 'Impossible de lister les caméras : ' + (e?.message || String(e));
-  }
+    status.textContent='Aucun numéro T + chiffres trouvé dans la photo.';
+    byId('source').textContent='Essaye un recadrage serré, avec les deux marges blanches.';
+    log('Échec photo '+file.name+'; erreurs : '+errors.join(' / '));
+  }catch(e){status.textContent='Erreur photo : '+(e.message||e);log('Erreur photo : '+e.message);}
+  finally{event.target.value='';}
+});
+function manual(){
+  const text=byId('manual').value;const n=getNumber(text,true);
+  if(!n){status.textContent='Saisis T suivi du numéro, ou le numéro seul (6 à 16 chiffres).';return;}
+  confirmedNumber=n;
+  byId('value').textContent=n;
+  byId('source').textContent='Saisie manuelle';
+  status.textContent='Bobine saisie';send.disabled=false;
+  void stopCamera();
 }
-
-start.addEventListener('click', () => { void startCamera(); });
-stop.addEventListener('click', () => { void stopCamera().then(() => {status.textContent = 'Caméra arrêtée';}); });
-$('refreshCameras').addEventListener('click', () => { void listCameras(); });
-cameraSelect.addEventListener('change', async () => {
-  if (isScanning) { await stopCamera(); await startCamera(); }
+byId('useManual').addEventListener('click',manual);
+byId('manual').addEventListener('keydown',e=>{if(e.key==='Enter')manual();});
+send.addEventListener('click',()=>{
+  if(!confirmedNumber)return;
+  const u=new URL(POWERAPPS_URL);
+  if(u.protocol!=='https:'||u.hostname.toLowerCase()!=='apps.powerapps.com')return;
+  u.searchParams.set('bobine',confirmedNumber);
+  window.location.assign(u.toString());
 });
-
-torchButton.addEventListener('click', async () => {
-  if (!isScanning || !scanner) return;
-  try {
-    const feature = scanner.getRunningTrackCameraCapabilities().torchFeature();
-    await feature.apply(!torchOn);
-    torchOn = !torchOn;
-    torchButton.textContent = torchOn ? 'Éteindre la lampe' : 'Allumer la lampe';
-  } catch (e) { status.textContent = 'Lampe indisponible sur cet appareil.'; }
-});
-
-zoom.addEventListener('input', async () => {
-  $('zoomValue').textContent = Number(zoom.value).toFixed(1) + '×';
-  if (!isScanning || !scanner) return;
-  try {
-    await scanner.getRunningTrackCameraCapabilities().zoomFeature().apply(Number(zoom.value));
-  } catch (e) { status.textContent = 'Zoom non disponible.'; }
-});
-
-$('photo').addEventListener('change', async event => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  try {
-    await stopCamera();
-    status.textContent = 'Analyse de la photo : ' + file.name + ' (' + Math.round(file.size / 1024) + ' Ko)…';
-    const decoded = await getScanner().scanFile(file, true);
-    if (!setCode(decoded)) status.textContent = 'La photo contient un code, mais pas un numéro de bobine reconnu.';
-  } catch (e) {
-    const detail = e && e.message ? e.message : String(e);
-    console.error('Erreur scan photo', e);
-    status.textContent = 'Échec de lecture photo — détail : ' + detail.slice(0, 260);
-    error.textContent = 'Si la photo est nette, essaie de la recadrer sur le seul code-barres en gardant les deux marges blanches. Le détail ci-dessus permettra de diagnostiquer l’erreur.';
-  } finally { event.target.value = ''; }
-});
-
-$('useManual').addEventListener('click', () => { setCode($('manual').value); });
-$('manual').addEventListener('keydown', e => { if (e.key === 'Enter') setCode(e.currentTarget.value); });
-send.addEventListener('click', () => {
-  if (!detectedBobine) return;
-  try {
-    const u = new URL(POWERAPPS_URL);
-    if (u.protocol !== 'https:' || u.hostname.toLowerCase() !== 'apps.powerapps.com') {
-      error.textContent = 'Adresse Power Apps non autorisée.';
-      return;
-    }
-    u.searchParams.set('bobine', detectedBobine);
-    window.location.assign(u.toString());
-  } catch (e) {
-    error.textContent = 'Le lien Power Apps est mal configuré.';
-  }
-});
-window.addEventListener('pagehide', () => { void stopCamera(); });
+window.addEventListener('pagehide',()=>{void stopCamera();});
+void initEngines();
 </script>
 </body>
 </html>
