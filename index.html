@@ -4,15 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
-<title>LISI — Lecteur de bobines (Natif + ZBar)</title>
+<title>Scanner une bobine</title>
 <style>
 :root{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#152236;background:#f4f7fb}
 *{box-sizing:border-box}
 body{margin:0;padding:16px 13px 35px}
 main{max-width:540px;margin:auto}
-h1{font-size:1.55rem;margin:4px 0 5px}
+h1{font-size:1.55rem;margin:4px 0 12px}
 p{line-height:1.45}
-.hint{color:#546679;font-size:.88rem}
 .tag{color:#607084;letter-spacing:.07em;font-size:.71rem;font-weight:750;text-transform:uppercase}
 .card{background:white;border:1px solid #dfe5eb;border-radius:16px;padding:15px;margin:13px 0;box-shadow:0 1px 5px #14243a09}
 #status{font-size:1rem;font-weight:700;min-height:1.6em}
@@ -24,55 +23,32 @@ button.secondary{background:#e9eef5;color:#142236}button:disabled{opacity:.5;cur
 label{display:block;font-weight:650;margin:10px 0 5px}
 input,select{width:100%;font:inherit;padding:10px;border:1px solid #aab7c7;border-radius:8px;background:white}
 #value{font-size:clamp(1.6rem,6vw,2rem);font-weight:800;letter-spacing:.03em;min-height:2rem;margin:6px 0}
-.notice{font-size:.84rem;background:#edf3f9;color:#40536a;padding:10px;border-radius:9px;overflow-wrap:anywhere}
-.engines{display:grid;grid-template-columns:1fr;gap:6px;margin:10px 0}
-.engine{display:flex;justify-content:space-between;gap:10px;font-size:.88rem;border:1px solid #e1e6ed;border-radius:8px;padding:8px 10px}
-.engine span:last-child{text-align:right;overflow-wrap:anywhere;color:#44566b}
-#debug{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.79rem;color:#4e6070}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
 <main>
-<header>
-<div class="tag">LISI · Barcode Reader · Natif + ZBar</div>
-<h1>Scanner une bobine</h1>
-<p class="hint">Lecture combinée Natif Edge + ZBar. La caméra choisie est mémorisée sur ce téléphone.</p>
-</header>
+<header><h1>Scanner une bobine</h1></header>
 <section class="card">
-<div class="tag">1 — Caméra et diagnostic</div>
+<div class="tag">1 — Lecture étiquette</div>
 <p id="status" role="status">Chargement des décodeurs…</p>
 <video id="video" autoplay muted playsinline></video>
 <label for="camera">Caméra</label>
 <select id="camera"><option value="">Caméra arrière automatique</option></select>
-<p class="hint" id="cameraInfo">Choisis une fois la caméra qui fonctionne : elle sera réutilisée lors des prochaines visites.</p>
 <div class="row"><button id="start">Activer la caméra</button><button id="stop" class="secondary" disabled>Arrêter</button></div>
 <button id="list" class="secondary">Lister les caméras</button>
-<div class="engines">
-<div class="engine"><strong>Natif Edge</strong><span id="nativeState">Vérification…</span></div>
-<div class="engine"><strong>ZBar</strong><span id="zbarState">Vérification…</span></div>
-</div>
-<label for="photo">Analyser une photo de l'étiquette</label>
-<input id="photo" type="file" accept="image/*">
-<p class="hint">Pour la caméra : garde des marges blanches autour des barres, évite les reflets et approche progressivement l'étiquette.</p>
 </section>
 <section class="card">
 <div class="tag">2 — Numéro de bobine</div>
 <div id="value" aria-live="polite">—</div>
-<p class="hint" id="source">En attente de lecture</p>
 <label for="manual">Saisie manuelle de secours</label>
 <input id="manual" type="text" inputmode="text" autocomplete="off" placeholder="Ex. T478540301">
 <button class="secondary" id="useManual">Utiliser la saisie</button>
 </section>
 <section class="card">
-<div class="tag">3 — Power Apps</div>
 <button id="send" disabled>Ouvrir la fiche bobine</button>
-<div class="notice" id="message" role="status">Le lien Power Apps est enregistré. Aucune bobine envoyée avant ton clic.</div>
 </section>
-<details class="card"><summary>Diagnostic avancé</summary><p id="debug">—</p></details>
-<p class="hint">Cette version utilise deux moteurs indépendants. Les images sont analysées localement dans le navigateur ; ZBar est chargé depuis jsDelivr. Le site GitHub Pages reste public ; l'usage professionnel est soumis aux règles informatiques LISI.</p>
 </main>
-<!-- ZBar est chargé en secours ; le moteur natif est fourni par Edge. -->
 <script src="https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/index.js"></script>
 <script>
 'use strict';
@@ -86,16 +62,10 @@ let nativeDetector = null, confirmedNumber = '', engineIndex = 0;
 let lastAttempt = 0;
 const engines = ['native','native','zbar']; // Priorité au natif : 2 passages sur 3 ; ZBar en secours.
 const engineNames = {native:'Natif Edge',zbar:'ZBar'};
-const stateIds = {native:'nativeState',zbar:'zbarState'};
 const available = {native:false,zbar:false};
-let recentDebug = [];
-function log(message) {
-  const stamp = new Date().toLocaleTimeString('fr-FR');
-  recentDebug.unshift(stamp+' — '+message);
-  recentDebug = recentDebug.slice(0,22);
-  byId('debug').textContent = recentDebug.join('\n');
-}
-function state(engine,message){byId(stateIds[engine]).textContent=message;}
+// Diagnostics techniques conservés uniquement dans la console du navigateur.
+function log(message) { console.info('[Scanner LISI]', message); }
+function state(engine,message) { console.info('[Scanner LISI] '+engine+': '+message); }
 // Lecture automatique : on exige le préfixe T des étiquettes LISI.
 function getNumber(raw, manual=false) {
   const text = String(raw ?? '').trim();
@@ -109,13 +79,9 @@ function acceptNumber(number, engine, raw, photo=false) {
   // une bobine pouvait être affichée par Natif Edge sans jamais être confirmée.
   confirmedNumber = number;
   byId('value').textContent = number;
-  byId('source').textContent = photo
-    ? 'Photo lue par '+engineNames[engine]+' : '+raw+' — vérifie le numéro avant ouverture'
-    : 'Lu par '+engineNames[engine]+' : '+raw;
   status.textContent = 'Bobine détectée';
   status.classList.add('scan-success');
   send.disabled = false;
-  byId('message').textContent = 'Bobine '+number+' prête à ouvrir dans Power Apps.';
   // La vibration se déclenche dès le premier code valide, comme dans l'ancienne version.
   try { if (navigator.vibrate) navigator.vibrate([100, 45, 100]); } catch (_) {}
   // Arrête immédiatement la caméra pour ne pas lire une autre étiquette.
@@ -145,7 +111,7 @@ async function initEngines() {
     available.zbar=true;state('zbar','Prêt (chargement WASM au 1er scan)');
   }else state('zbar','Bibliothèque non chargée');
   const ready=engines.filter(e=>available[e]);
-  status.textContent=ready.length?'Moteurs disponibles : '+ready.map(e=>engineNames[e]).join(', '):'Aucun moteur disponible (réseau ou navigateur).';
+  status.textContent=ready.length?'En attente de scan':'Aucun lecteur disponible sur ce navigateur.';
   log('Moteurs disponibles : '+ready.join(', '));
 }
 function snapshot(source, maxDim=1700) {
@@ -229,7 +195,6 @@ byId('start').addEventListener('click',async()=>{
       byId('camera').value='';
       preferred='';
       stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
-      byId('cameraInfo').textContent='Caméra mémorisée introuvable : sélectionne à nouveau la caméra qui fonctionne.';
     }
     video.srcObject=stream;await video.play();
     await listCameras(stream.getVideoTracks()[0]?.getSettings?.().deviceId || '');
@@ -273,9 +238,6 @@ async function listCameras(activeId=''){
     }
     if(!target && idInList(activeId)) target=activeId;
     sel.value=target;
-    byId('cameraInfo').textContent=target && target===readPreference(CAMERA_ID_KEY)
-      ? 'Caméra préférée enregistrée sur ce téléphone : '+(devices.find(d=>d.deviceId===target)?.label||'caméra sélectionnée')
-      : 'Sélectionne la caméra qui lit correctement, puis active-la : ce choix sera mémorisé.';
     log(devices.length+' caméra(s) trouvée(s), sélection : '+(sel.selectedOptions[0]?.textContent||'automatique'));
   }catch(e){log('Liste caméras : '+e.message);}
 }
@@ -288,83 +250,16 @@ byId('camera').addEventListener('change',()=>{
   if(sel.value) {
     savePreference(CAMERA_ID_KEY,sel.value);
     savePreference(CAMERA_LABEL_KEY,sel.selectedOptions[0]?.textContent||'');
-    byId('cameraInfo').textContent='Caméra mémorisée. Elle sera sélectionnée automatiquement lors des prochains scans.';
   }else{
     clearPreference(CAMERA_ID_KEY);clearPreference(CAMERA_LABEL_KEY);
-    byId('cameraInfo').textContent='Mode caméra automatique restauré.';
   }
   if(running)status.textContent='Caméra modifiée : clique sur Arrêter puis Activer la caméra pour appliquer ce choix.';
-});
-async function drawPhoto(file){
-  if(typeof createImageBitmap==='function'){
-    const bitmap=await createImageBitmap(file);
-    // Dessiner directement l'image chargée, sans rouvrir la caméra.
-    const factor=Math.min(1,2200/Math.max(bitmap.width,bitmap.height));
-    canvas.width=Math.max(1,Math.round(bitmap.width*factor));canvas.height=Math.max(1,Math.round(bitmap.height*factor));
-    ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
-    return true;
-  }
-  const url=URL.createObjectURL(file);
-  try{
-    const img=new Image();img.src=url;await img.decode();
-    const f=Math.min(1,2200/Math.max(img.naturalWidth,img.naturalHeight));
-    canvas.width=Math.round(img.naturalWidth*f);canvas.height=Math.round(img.naturalHeight*f);
-    ctx.drawImage(img,0,0,canvas.width,canvas.height);return true;
-  }finally{URL.revokeObjectURL(url);}
-}
-function makeVariant(original,variant){
-  if(variant==='original')return original;
-  const modified=document.createElement('canvas');
-  const c=modified.getContext('2d',{willReadFrequently:true});
-  if(variant==='middle'){
-    // Rectangle central large, qui laisse une marge autour des barres.
-    const sx=Math.round(original.width*.04),sy=Math.round(original.height*.24);
-    const sw=Math.round(original.width*.92),sh=Math.round(original.height*.52);
-    modified.width=sw;modified.height=sh;c.drawImage(original,sx,sy,sw,sh,0,0,sw,sh);
-    return modified;
-  }
-  modified.width=original.width;modified.height=original.height;
-  c.drawImage(original,0,0);
-  const img=c.getImageData(0,0,modified.width,modified.height);
-  for(let i=0;i<img.data.length;i+=4){
-    const gray=(77*img.data[i]+150*img.data[i+1]+29*img.data[i+2])>>8;
-    const v=gray<165?0:255;
-    img.data[i]=v;img.data[i+1]=v;img.data[i+2]=v;
-  }
-  c.putImageData(img,0,0);return modified;
-}
-byId('photo').addEventListener('change',async event=>{
-  const file=event.target.files?.[0];if(!file)return;
-  await stopCamera();
-  status.classList.remove('scan-success');
-  status.textContent='Analyse de la photo avec les moteurs disponibles…';
-  const errors=[];
-  try{
-    await drawPhoto(file);
-    // Conserver un original indépendant des variantes.
-    const original=document.createElement('canvas');original.width=canvas.width;original.height=canvas.height;
-    original.getContext('2d',{willReadFrequently:true}).drawImage(canvas,0,0);
-    for(const variant of ['original','middle','contrast']){
-      const frame=makeVariant(original,variant);
-      for(const engine of engines){
-        if(!available[engine])continue;
-        try{
-          if(await decodeUsingEngine(engine,frame,true)){log('Photo reconnue avec '+engine+' ('+variant+')');return;}
-        }catch(e){errors.push(engine+': '+String(e.message||e));}
-      }
-    }
-    status.textContent='Aucun numéro T + chiffres trouvé dans la photo.';
-    byId('source').textContent='Essaye un recadrage serré, avec les deux marges blanches.';
-    log('Échec photo '+file.name+'; erreurs : '+errors.join(' / '));
-  }catch(e){status.textContent='Erreur photo : '+(e.message||e);log('Erreur photo : '+e.message);}
-  finally{event.target.value='';}
 });
 function manual(){
   const text=byId('manual').value;const n=getNumber(text,true);
   if(!n){status.textContent='Saisis T suivi du numéro, ou le numéro seul (6 à 16 chiffres).';return;}
   confirmedNumber=n;
   byId('value').textContent=n;
-  byId('source').textContent='Saisie manuelle';
   status.classList.remove('scan-success');
   status.textContent='Bobine saisie';send.disabled=false;
   void stopCamera();
