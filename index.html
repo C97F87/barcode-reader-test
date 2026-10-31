@@ -16,6 +16,7 @@ p{line-height:1.45}
 .tag{color:#607084;letter-spacing:.07em;font-size:.71rem;font-weight:750;text-transform:uppercase}
 .card{background:white;border:1px solid #dfe5eb;border-radius:16px;padding:15px;margin:13px 0;box-shadow:0 1px 5px #14243a09}
 #status{font-size:1rem;font-weight:700;min-height:1.6em}
+#status.scan-success{color:#168741}
 video{display:block;width:100%;max-height:340px;aspect-ratio:4/3;border-radius:12px;object-fit:contain;background:#152236}
 button{appearance:none;border:0;background:#00477c;color:white;border-radius:9px;padding:12px;font-weight:700;font-size:1rem;width:100%;cursor:pointer;margin:5px 0}
 button.secondary{background:#e9eef5;color:#142236}button:disabled{opacity:.5;cursor:not-allowed}
@@ -82,7 +83,7 @@ const canvas = document.createElement('canvas');
 const ctx = canvas.getContext('2d', {willReadFrequently:true});
 let stream = null, running = false, working = false, scannerToken = 0;
 let nativeDetector = null, confirmedNumber = '', engineIndex = 0;
-let lastAttempt = 0, seen = null;
+let lastAttempt = 0;
 const engines = ['native','native','zbar']; // Priorité au natif : 2 passages sur 3 ; ZBar en secours.
 const engineNames = {native:'Natif Edge',zbar:'ZBar'};
 const stateIds = {native:'nativeState',zbar:'zbarState'};
@@ -102,47 +103,34 @@ function getNumber(raw, manual=false) {
   const match = expression.exec(text);
   return match ? match[1] : '';
 }
-function acceptNumber(number,engine,raw) {
+function acceptNumber(number, engine, raw, photo=false) {
+  // Un seul décodage fiable du format LISI T + chiffres suffit.
+  // L'ancienne logique exigeait 3 lectures ou 2 moteurs concordants :
+  // une bobine pouvait être affichée par Natif Edge sans jamais être confirmée.
   confirmedNumber = number;
   byId('value').textContent = number;
-  byId('source').textContent = 'Confirmé par '+engineNames[engine]+' : '+raw;
-  status.textContent='Bobine détectée';
-  send.disabled=false;
-  byId('message').textContent='Bobine '+number+' prête à ouvrir dans Power Apps.';
-  if(navigator.vibrate)navigator.vibrate(80);
-  void stopCamera();
+  byId('source').textContent = photo
+    ? 'Photo lue par '+engineNames[engine]+' : '+raw+' — vérifie le numéro avant ouverture'
+    : 'Lu par '+engineNames[engine]+' : '+raw;
+  status.textContent = 'Bobine détectée';
+  status.classList.add('scan-success');
+  send.disabled = false;
+  byId('message').textContent = 'Bobine '+number+' prête à ouvrir dans Power Apps.';
+  // La vibration se déclenche dès le premier code valide, comme dans l'ancienne version.
+  try { if (navigator.vibrate) navigator.vibrate([100, 45, 100]); } catch (_) {}
+  // Arrête immédiatement la caméra pour ne pas lire une autre étiquette.
+  if (!photo) void stopCamera();
 }
 function registerCandidate(raw, engine, photo=false) {
   const clean = getNumber(raw);
-  if(!clean) {
-    if(raw) log(engineNames[engine]+' : autre contenu détecté '+JSON.stringify(String(raw).slice(0,80)));
+  if (!clean) {
+    if (raw) log(engineNames[engine]+' : autre contenu détecté '+JSON.stringify(String(raw).slice(0,80)));
     return false;
   }
-  state(engine,'T'+clean+' reconnu');
+  state(engine, 'T'+clean+' reconnu');
   log(engineNames[engine]+' a lu T'+clean+(photo?' (photo)':''));
-  // Sur une photo unique, on permet la confirmation manuelle depuis l'écran :
-  // aucune navigation vers Power Apps n'est automatique.
-  if(photo) {
-    confirmedNumber=clean;
-    byId('value').textContent=clean;
-    byId('source').textContent='Photo lue par '+engineNames[engine]+' — vérifier le numéro avant ouverture';
-    status.textContent='Code détecté sur la photo';
-    send.disabled=false;
-    return true;
-  }
-  const now=Date.now();
-  if(!seen || seen.n!==clean || now-seen.last>6000) {
-    seen={n:clean, last:now, attempts:1, engines:new Set([engine])};
-  } else {
-    seen.attempts++;
-    seen.engines.add(engine);
-    seen.last=now;
-  }
-  byId('value').textContent=clean;
-  byId('source').textContent='Vérification du numéro… ('+seen.attempts+' lecture(s), '+Array.from(seen.engines).map(e=>engineNames[e]).join(' + ')+')';
-  // 2 moteurs concordants OU 3 lectures concordantes d'un moteur.
-  if(seen.engines.size>=2 || seen.attempts>=3){acceptNumber(clean,engine,raw);return true;}
-  return false;
+  acceptNumber(clean, engine, raw, photo);
+  return true;
 }
 async function initEngines() {
   if('BarcodeDetector' in window) {
@@ -245,14 +233,15 @@ byId('start').addEventListener('click',async()=>{
     }
     video.srcObject=stream;await video.play();
     await listCameras(stream.getVideoTracks()[0]?.getSettings?.().deviceId || '');
-    running=true;seen=null;lastAttempt=0;engineIndex=0;
+    running=true;lastAttempt=0;engineIndex=0;
     byId('start').disabled=true;byId('stop').disabled=false;
+    status.classList.remove('scan-success');
     status.textContent='Analyse des images avec les moteurs disponibles…';
     const token=++scannerToken;
     requestAnimationFrame(t=>tick(t,token));
   }catch(e){status.textContent='Caméra inaccessible : '+(e?.message||String(e));await stopCamera();}
 });
-byId('stop').addEventListener('click',()=>{void stopCamera();status.textContent='Caméra arrêtée';});
+byId('stop').addEventListener('click',()=>{void stopCamera();status.classList.remove('scan-success');status.textContent='Caméra arrêtée';});
 // La préférence est uniquement enregistrée dans ce navigateur (pas dans GitHub ou Power Apps).
 const CAMERA_ID_KEY='lisi_pref_camera_id_v1';
 const CAMERA_LABEL_KEY='lisi_pref_camera_label_v1';
@@ -347,6 +336,7 @@ function makeVariant(original,variant){
 byId('photo').addEventListener('change',async event=>{
   const file=event.target.files?.[0];if(!file)return;
   await stopCamera();
+  status.classList.remove('scan-success');
   status.textContent='Analyse de la photo avec les moteurs disponibles…';
   const errors=[];
   try{
@@ -375,6 +365,7 @@ function manual(){
   confirmedNumber=n;
   byId('value').textContent=n;
   byId('source').textContent='Saisie manuelle';
+  status.classList.remove('scan-success');
   status.textContent='Bobine saisie';send.disabled=false;
   void stopCamera();
 }
