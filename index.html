@@ -53,6 +53,13 @@ input,select{width:100%;font:inherit;padding:10px;border:1px solid #aab7c7;borde
 <script>
 'use strict';
 const POWERAPPS_URL = 'https://apps.powerapps.com/play/e/default-2da651fa-07e9-4e14-8225-3979c556c063/a/81fbe4f7-ce8f-4592-ab96-1d712d44a0db?tenantId=2da651fa-07e9-4e14-8225-3979c556c063';
+// Paramètres éventuels du contrôle d'emplacement reçus depuis Power Apps.
+// Sans session valide, le scanner conserve son fonctionnement habituel.
+const scannerParams = new URLSearchParams(window.location.search);
+const controleMode = scannerParams.get('mode') === 'controle';
+const controleSession = (scannerParams.get('session') || '').trim();
+const controleEmplacement = (scannerParams.get('emplacement') || '').trim().toUpperCase();
+const controleActif = controleMode && !!controleSession && !!controleEmplacement;
 const byId = id => document.getElementById(id);
 const video = byId('video'), status = byId('status'), send = byId('send');
 const canvas = document.createElement('canvas');
@@ -271,6 +278,13 @@ send.addEventListener('click',()=>{
   const u=new URL(POWERAPPS_URL);
   if(u.protocol!=='https:'||u.hostname.toLowerCase()!=='apps.powerapps.com')return;
   u.searchParams.set('bobine',confirmedNumber);
+  // Le résultat ouvre toujours la fiche bobine.
+  // Si un contrôle est actif, on retransmet la session pour l'enregistrement automatique.
+  if(controleActif){
+    u.searchParams.set('mode','controle');
+    u.searchParams.set('session',controleSession);
+    u.searchParams.set('emplacement',controleEmplacement);
+  }
   window.location.assign(u.toString());
 });
 window.addEventListener('pagehide',()=>{void stopCamera();});
